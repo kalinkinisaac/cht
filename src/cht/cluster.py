@@ -3,9 +3,11 @@ from __future__ import annotations
 import logging
 import re
 from time import strftime, time
-from typing import Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional, Sequence
 
 import clickhouse_connect
+from clickhouse_connect.driver.client import Client
+from clickhouse_connect.driver.query import QueryResult
 import pandas as pd
 
 _logger = logging.getLogger("cht.cluster")
@@ -47,9 +49,7 @@ class Cluster:
         verify: bool = False,
         log_sql_text: bool = True,
         log_sql_truncate: int = 4000,
-        client_factory: Callable[
-            ..., clickhouse_connect.driver.client.Client
-        ] = clickhouse_connect.get_client,
+        client_factory: Callable[..., Client] = clickhouse_connect.get_client,
     ) -> None:
         self.name = name
         self.host = host
@@ -64,7 +64,7 @@ class Cluster:
             log_sql_truncate if log_sql_truncate and log_sql_truncate > 0 else 4000
         )
         self._client_factory = client_factory
-        self._client: Optional[clickhouse_connect.driver.client.Client] = None
+        self._client: Optional[Client] = None
 
         if not _logger.handlers:
             logging.basicConfig(
@@ -74,7 +74,7 @@ class Cluster:
 
     # ----------------------- connection management -----------------------
     @property
-    def client(self) -> clickhouse_connect.driver.client.Client:
+    def client(self) -> Client:
         if self._client is None:
             settings = {"readonly": 1} if self.read_only else {}
 
@@ -104,7 +104,7 @@ class Cluster:
         return self._client
 
     # ---------------------------- execution ------------------------------
-    def _execute_logged(self, sql: str, *, test_run: bool = False):
+    def _execute_logged(self, sql: str, *, test_run: bool = False) -> Optional[QueryResult]:
         trimmed = (sql or "").strip()
         mutating = is_mutating(trimmed)
 
@@ -166,12 +166,12 @@ class Cluster:
             )
             raise
 
-    def query(self, sql: str, *, test_run: bool = False):
+    def query(self, sql: str, *, test_run: bool = False) -> Optional[Sequence[Sequence[Any]]]:
         """Execute SQL and return rows (or None for mutation statements)."""
         result = self._execute_logged(sql, test_run=test_run)
         return None if result is None else result.result_rows
 
-    def query_raw(self, sql: str, *, test_run: bool = False):
+    def query_raw(self, sql: str, *, test_run: bool = False) -> Optional[QueryResult]:
         """Execute SQL and return the ``QueryResult`` object from ``clickhouse_connect``."""
         return self._execute_logged(sql, test_run=test_run)
 
@@ -217,6 +217,8 @@ class Cluster:
         ORDER BY used_percentage DESC
         """
         result = self.query_raw(sql)
+        if result is None:
+            return pd.DataFrame()
         return pd.DataFrame(result.result_rows, columns=result.column_names)
 
     def get_table_disk_distribution(self, database: str = "default") -> pd.DataFrame:
@@ -240,6 +242,8 @@ class Cluster:
         ORDER BY sum(p.bytes_on_disk) DESC
         """
         result = self.query_raw(sql)
+        if result is None:
+            return pd.DataFrame()
         return pd.DataFrame(result.result_rows, columns=result.column_names)
 
     def get_column_disk_usage(
@@ -267,6 +271,8 @@ class Cluster:
         ORDER BY sum(column_data_compressed_bytes) DESC
         """
         result = self.query_raw(sql)
+        if result is None:
+            return pd.DataFrame()
         return pd.DataFrame(result.result_rows, columns=result.column_names)
 
     # ------------------------------ misc ---------------------------------

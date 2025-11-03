@@ -42,7 +42,7 @@ __all__ = [
     "is_mutating",
     # DataFrame utilities
     "build_create_table_sql",
-    "create_table_from_dataframe", 
+    "create_table_from_dataframe",
     "insert_dataframe",
     "pandas_dtype_to_clickhouse",
     "resolve_column_types",
