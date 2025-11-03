@@ -188,10 +188,14 @@ def test_table_from_df_auto_generated_name():
 
 
 def test_table_from_df_requires_cluster():
-    """Test that Table.from_df() requires a cluster."""
-    df = pd.DataFrame({"id": [1, 2, 3]})
-
-    with pytest.raises(RuntimeError, match="Table operation requires a bound Cluster instance"):
+    """Test that from_df raises error when cluster is None."""
+    df = pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
+    
+    # Clear any default cluster to ensure clean test
+    from cht.table import Table
+    Table.clear_default_cluster()
+    
+    with pytest.raises(RuntimeError, match="Table operation requires a cluster"):
         Table.from_df(df, cluster=None)
 
 

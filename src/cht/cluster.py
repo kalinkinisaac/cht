@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import timedelta
 from time import strftime, time
-from typing import Any, Callable, Iterable, Optional, Sequence
+from typing import Any, Callable, Iterable, Optional, Sequence, Union
 
 import clickhouse_connect
 import pandas as pd
@@ -274,6 +275,108 @@ class Cluster:
         if result is None:
             return pd.DataFrame()
         return pd.DataFrame(result.result_rows, columns=result.column_names)
+
+    # ------------------------ temp table management ---------------------
+    def cleanup_temp_tables(
+        self,
+        database: str = "temp",
+        table_pattern: Optional[str] = None,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        """
+        Clean up expired temporary tables based on comment metadata.
+        
+        Args:
+            database: Database to clean (default: "temp")
+            table_pattern: Optional LIKE pattern for table names
+            dry_run: If True, only return what would be deleted
+            
+        Returns:
+            Dictionary with cleanup results including counts and errors
+            
+        Example:
+            >>> cluster = Cluster("local", "localhost")
+            >>> result = cluster.cleanup_temp_tables("temp", dry_run=True)
+            >>> print(f"Found {result['expired_tables_found']} expired tables")
+        """
+        from cht.temp_tables import cleanup_expired_tables
+        return cleanup_expired_tables(self, database, table_pattern, dry_run)
+
+    def get_temp_tables(
+        self,
+        database: str = "temp",
+        table_pattern: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """
+        Get information about temporary tables with TTL metadata.
+        
+        Args:
+            database: Database to check (default: "temp")
+            table_pattern: Optional LIKE pattern for table names
+            
+        Returns:
+            DataFrame with columns: table, comment, expires_at, expired
+            
+        Example:
+            >>> cluster = Cluster("local", "localhost")
+            >>> temp_tables = cluster.get_temp_tables("temp")
+            >>> expired = temp_tables[temp_tables['expired'] == True]
+        """
+        from cht.temp_tables import get_expired_tables
+        return get_expired_tables(self, database, table_pattern=table_pattern)
+
+    def create_temp_table(
+        self,
+        query: str,
+        name: Optional[str] = None,
+        database: str = "temp",
+        ttl: Optional[timedelta] = timedelta(days=1),
+        order_by: Optional[Union[str, Iterable[str]]] = None,
+        on_cluster: Optional[str] = None,
+    ) -> str:
+        """
+        Create a temporary table with automatic TTL management.
+        
+        Args:
+            query: SELECT query to populate the table
+            name: Table name (auto-generated if None)
+            database: Database name (default: "temp")
+            ttl: Time to live (None for no expiration, default: 1 day)
+            order_by: ORDER BY columns
+            on_cluster: Cluster name for distributed tables
+            
+        Returns:
+            Full table name (database.table)
+            
+        Example:
+            >>> cluster = Cluster("local", "localhost")
+            >>> table_name = cluster.create_temp_table(
+            ...     "SELECT * FROM events WHERE date = '2023-01-01'",
+            ...     ttl=timedelta(hours=2)
+            ... )
+        """
+        from cht.temp_tables import create_temp_table_sql, generate_temp_table_name
+        
+        if name is None:
+            name = generate_temp_table_name("tmp_")
+            
+        create_sql, alter_sql = create_temp_table_sql(
+            query=query,
+            table_name=name,
+            database=database,
+            ttl=ttl,
+            order_by=order_by,
+            on_cluster=on_cluster,
+        )
+        
+        # Execute CREATE TABLE
+        self.query(create_sql)
+        
+        # Execute ALTER for TTL comment if needed
+        if alter_sql:
+            self.query(alter_sql)
+            
+        return f"{database}.{name}"
 
     # ------------------------------ misc ---------------------------------
     def __repr__(self) -> str:  # pragma: no cover - trivial

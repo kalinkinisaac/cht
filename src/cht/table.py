@@ -23,11 +23,18 @@ class Table:
     * backup / restore flows
     * materialised view discovery and replay support
     * basic data hygiene tasks
+    
+    The Table class supports a default cluster mechanism to avoid specifying
+    cluster in every operation. Use Table.set_default_cluster() to set a
+    global default, or pass cluster explicitly to override.
     """
 
     name: str
     database: str = "default"
     cluster: Optional[Cluster] = None
+    
+    # Class-level default cluster
+    _default_cluster: Optional[Cluster] = None
 
     def __post_init__(self) -> None:
         if not _logger.handlers:
@@ -47,9 +54,42 @@ class Table:
 
     # ----------------------------- internals ------------------------------
     def _require_cluster(self) -> Cluster:
-        if not self.cluster:
-            raise RuntimeError("Table operation requires a bound Cluster instance")
-        return self.cluster
+        """Get cluster instance, checking instance cluster first, then default cluster."""
+        if self.cluster:
+            return self.cluster
+        if Table._default_cluster:
+            return Table._default_cluster
+        raise RuntimeError(
+            "Table operation requires a cluster. Either set cluster=... on the Table "
+            "instance or use Table.set_default_cluster() to set a global default."
+        )
+
+    # -------------------------- class methods ----------------------------
+    @classmethod
+    def set_default_cluster(cls, cluster: Cluster) -> None:
+        """
+        Set the default cluster for all Table instances.
+        
+        Args:
+            cluster: Cluster instance to use as default
+            
+        Example:
+            >>> cluster = Cluster("local", "localhost")
+            >>> Table.set_default_cluster(cluster)
+            >>> table = Table("events", "analytics")  # No cluster needed
+            >>> table.exists()  # Uses default cluster
+        """
+        cls._default_cluster = cluster
+
+    @classmethod
+    def get_default_cluster(cls) -> Optional[Cluster]:
+        """Get the current default cluster."""
+        return cls._default_cluster
+
+    @classmethod
+    def clear_default_cluster(cls) -> None:
+        """Clear the default cluster."""
+        cls._default_cluster = None
 
     # ----------------------------- metadata -------------------------------
     def exists(self) -> bool:
