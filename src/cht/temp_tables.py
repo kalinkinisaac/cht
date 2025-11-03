@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable, Optional, Sequence, Union
+from typing import Any, Iterable, Optional, Union
 
 import pandas as pd
 
@@ -294,7 +294,7 @@ def cleanup_expired_tables(
     """
     # Get expired tables
     expired_df = get_expired_tables(cluster, database, now=now, table_pattern=table_pattern)
-    expired_tables = expired_df[expired_df["expired"] == True]["table"].tolist()  # Use == for boolean comparison
+    expired_tables = expired_df[expired_df["expired"]]["table"].tolist()  # Use boolean indexing
     
     results = {
         "database": database,

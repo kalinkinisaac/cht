@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -392,37 +393,82 @@ class Table:
     def from_df(
         cls,
         df: pd.DataFrame,
-        cluster: Cluster,
+        cluster: Optional[Cluster] = None,
         *,
         database: str = "temp",
         name: Optional[str] = None,
         create_if_not_exists: bool = True,
         mode: str = "overwrite",
+        ttl: Optional[timedelta] = timedelta(days=1),
         **kwargs: Any,
     ) -> "Table":
         """
-        Create a Table instance from a pandas DataFrame.
+        Create a Table instance from a pandas DataFrame with optional TTL expiration.
+
+        This is the primary API for creating temporary tables from DataFrames. It handles
+        everything: table creation, data insertion, TTL management, and cleanup.
 
         Args:
             df: The DataFrame to load
-            cluster: ClickHouse cluster instance
+            cluster: ClickHouse cluster instance (uses default if None)
             database: Target database (default: "temp")
-            name: Table name (auto-generated if None)
+            name: Table name (auto-generated with unique suffix if None)
             create_if_not_exists: Whether to create table if it doesn't exist
             mode: "overwrite" (drop/recreate) or "append" (insert into existing)
+            ttl: Time to live for automatic cleanup (None = permanent, default: 1 day)
             **kwargs: Additional arguments (engine, order_by, partition_by, etc.)
 
         Returns:
-            Table instance pointing to the created table
+            Table instance pointing to the created table with TTL management
+
+        Examples:
+            >>> # Simple temporary table (expires in 1 day)
+            >>> df = pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
+            >>> table = Table.from_df(df, cluster)
+            >>> print(table.fqdn)  # temp.tmp_a1b2c3d4
+
+            >>> # Custom TTL and table name
+            >>> table = Table.from_df(
+            ...     df, cluster,
+            ...     name="my_analysis",
+            ...     ttl=timedelta(hours=2),  # Expires in 2 hours
+            ...     engine="MergeTree",
+            ...     order_by=["id"]
+            ... )
+
+            >>> # Permanent table (no expiration)
+            >>> table = Table.from_df(
+            ...     df, cluster,
+            ...     database="analytics",
+            ...     name="user_data", 
+            ...     ttl=None  # Never expires
+            ... )
+
+            >>> # Using default cluster (set once, use everywhere)
+            >>> Table.set_default_cluster(cluster)
+            >>> table = Table.from_df(df)  # No cluster needed!
         """
         from .dataframe import (
             create_table_from_dataframe,
             generate_temp_table_name,
             insert_dataframe,
         )
+        from .temp_tables import format_expires_at
+
+        # Use provided cluster or fall back to default
+        if cluster is None:
+            if cls._default_cluster is None:
+                raise RuntimeError(
+                    "Table.from_df() requires a cluster. Either pass cluster=... "
+                    "or use Table.set_default_cluster() to set a global default."
+                )
+            cluster = cls._default_cluster
 
         if name is None:
             name = generate_temp_table_name()
+
+        # Ensure name is not None for type safety
+        assert name is not None, "Table name must be provided or generated"
 
         table = cls(name=name, database=database, cluster=cluster)
 
@@ -459,5 +505,12 @@ class Table:
 
         else:
             raise ValueError(f"mode must be 'overwrite' or 'append', got: {mode}")
+
+        # Add TTL comment if specified
+        if ttl is not None:
+            from datetime import datetime, timezone
+            expires_at = datetime.now(timezone.utc) + ttl
+            comment = format_expires_at(expires_at)
+            cluster.query(f"ALTER TABLE {table.fqdn} MODIFY COMMENT '{comment}'")
 
         return table

@@ -190,15 +190,13 @@ def test_table_from_df_auto_generated_name():
 def test_table_from_df_requires_cluster():
     """Test that from_df raises error when cluster is None."""
     df = pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
-    
+
     # Clear any default cluster to ensure clean test
     from cht.table import Table
     Table.clear_default_cluster()
-    
-    with pytest.raises(RuntimeError, match="Table operation requires a cluster"):
+
+    with pytest.raises(RuntimeError, match="Table.from_df\\(\\) requires a cluster"):
         Table.from_df(df, cluster=None)
-
-
 def test_table_from_df_invalid_mode():
     """Test that invalid mode raises ValueError."""
     df = pd.DataFrame({"id": [1, 2, 3]})

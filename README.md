@@ -67,36 +67,32 @@ pip install -e .
 
 ### Quick Start Example
 ```python
-from cht import Cluster, Table
+from cht import Table
 import pandas as pd
+from datetime import timedelta
 
-cluster = Cluster(name="local", host="localhost", user="developer", password="developer")
+# Set default cluster once
+Table.set_default_cluster("local", host="localhost", user="developer", password="developer")
 
-# Traditional table operations
-table = Table("events", database="analytics", cluster=cluster)
-if table.exists():
-    print("Columns:", table.get_columns())
-
-# DataFrame integration
+# DataFrame integration - SIMPLE API
 df = pd.DataFrame({
     "id": [1, 2, 3],
     "name": ["Alice", "Bob", "Charlie"],
     "timestamp": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-03"])
 })
 
-# Create table from DataFrame
-temp_table = Table.from_df(
-    df, 
-    cluster=cluster,
-    database="temp", 
-    name="users",
-    mode="overwrite",
-    engine="MergeTree",
-    order_by=["id"]
-)
+# Create temporary table with TTL (expires in 1 day by default)
+table = Table.from_df(df, name="users")
+print(f"Created table: {table}")
 
-# Load table back to DataFrame
-result_df = temp_table.to_df()
+# Create with custom TTL (expires in 2 hours)
+table = Table.from_df(df, name="events", ttl=timedelta(hours=2))
+
+# Create permanent table (no TTL)
+table = Table.from_df(df, name="permanent_data", ttl=None)
+
+# Load data back to DataFrame
+result_df = table.to_df()
 print(result_df)
 ```
 
