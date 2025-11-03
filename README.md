@@ -6,11 +6,14 @@ Modular Python package of a reusable toolkit for day‑to‑day ClickHouse maint
 
 ### Install from GitHub Release (Recommended)
 ```bash
-# Install the latest release (always up-to-date)
-pip install https://github.com/kalinkinisaac/cht/releases/latest/download/cht-latest-py3-none-any.whl
+# Install latest from git (always up-to-date, no version pinning needed)
+pip install git+https://github.com/kalinkinisaac/cht.git
+
+# Or install latest release wheel (specific version)
+pip install https://github.com/kalinkinisaac/cht/releases/latest/download/cht-0.2.1-py3-none-any.whl
 
 # Or install a specific version
-pip install https://github.com/kalinkinisaac/cht/releases/download/v0.2.1/cht-0.2.1-py3-none-any.whl
+pip install https://github.com/kalinkinisaac/cht/releases/download/v0.2.0/cht-0.2.0-py3-none-any.whl
 ```
 
 ### Install from Source
