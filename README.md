@@ -2,6 +2,29 @@
 
 Modular Python package of a reusable toolkit for day‑to‑day ClickHouse maintenance.  It ships with composable helpers for cluster access, table lifecycle management, Kafka engine operations, and ad‑hoc SQL utilities, plus a Docker recipe for local testing.
 
+## Installation
+
+### Install from GitHub Release (Recommended)
+```bash
+# Install the latest wheel (fastest)
+pip install https://github.com/kalinkinisaac/cht/releases/download/v0.1.0/cht-0.1.0-py3-none-any.whl
+```
+
+### Install from Source
+```bash
+# Install from git repository (latest)
+pip install git+https://github.com/kalinkinisaac/cht.git
+
+# Install specific version
+pip install git+https://github.com/kalinkinisaac/cht.git@v0.1.0
+```
+
+### Verify Installation
+```python
+import cht
+print("cht version:", cht.__version__)
+```
+
 ## Features
 - `Cluster` wrapper with structured logging, bulk execution helper, and disk usage introspection.
 - `Table` convenience API for backups, restore flows, MV replay, and metadata inspection.
@@ -11,7 +34,7 @@ Modular Python package of a reusable toolkit for day‑to‑day ClickHouse maint
 - Test suite (`pytest`) covering the core control flow and edge cases.
 - Docker Compose environment that spins up a ClickHouse server with optional bootstrap SQL.
 
-## Getting Started
+## Development Setup
 
 ### Quick Setup
 ```bash
