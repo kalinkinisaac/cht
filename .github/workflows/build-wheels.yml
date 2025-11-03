@@ -95,48 +95,9 @@ jobs:
           name: wheels
           path: dist/*.whl
 
-  build-wheels-arm:
-    name: Build ARM wheels on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    needs: test
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install cibuildwheel
-        run: python -m pip install cibuildwheel==2.16.2
-
-      - name: Build ARM wheels
-        run: python -m cibuildwheel --output-dir wheelhouse
-        env:
-          CIBW_BUILD: cp310-* cp311-* cp312-*
-          CIBW_ARCHS_LINUX: aarch64
-          CIBW_TEST_REQUIRES: pytest pytest-mock
-          CIBW_TEST_COMMAND: pytest {project}/tests
-          CIBW_BUILD_VERBOSITY: 1
-
-      - name: Upload ARM wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-arm64
-          path: ./wheelhouse/*.whl
-
   publish-test-pypi:
     name: Publish to Test PyPI
-    needs: [build-sdist, build-wheels, build-wheels-arm]
+    needs: [build-sdist, build-wheels]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v'))
     environment:
@@ -163,7 +124,7 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI
-    needs: [build-sdist, build-wheels, build-wheels-arm]
+    needs: [build-sdist, build-wheels]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     environment:
@@ -184,7 +145,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build-sdist, build-wheels, build-wheels-arm]
+    needs: [build-sdist, build-wheels]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
