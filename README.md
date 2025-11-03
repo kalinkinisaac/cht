@@ -12,19 +12,30 @@ Modular Python package of a reusable toolkit for day‑to‑day ClickHouse maint
 - Docker Compose environment that spins up a ClickHouse server with optional bootstrap SQL.
 
 ## Getting Started
+
+### Quick Setup
+```bash
+# Clone the repository
+git clone https://github.com/kalinkinisaac/cht.git
+cd cht
+
+# Run the setup script (creates venv and installs dependencies)
+./scripts/setup-dev.sh
+
+# Activate the environment
+source .venv/bin/activate
+```
+
+### Manual Setup
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-For local development:
-```bash
 pip install -r requirements-dev.txt
+pip install -e .
 ```
 
-Quick sanity check:
+### Quick Start Example
 ```python
 from cht import Cluster, Table
 
@@ -35,17 +46,29 @@ if table.exists():
     print("Columns:", table.get_columns())
 ```
 
-## Running Tests
+## Development
+
+### Running Tests
 ```bash
-pytest
+pytest                    # Run all tests
+pytest -v                # Verbose output
+pytest tests/test_*.py   # Run specific test files
 ```
 
-## Building a Wheel Locally
+### Code Quality
 ```bash
-python -m pip install --upgrade build
-python -m build --wheel
+black src tests          # Format code
+isort src tests          # Sort imports
+flake8 src tests         # Lint code
 ```
-The wheel lands under `dist/` and can be installed via `pip install dist/<file>.whl`.
+
+### Building Wheels
+```bash
+python -m build          # Build source dist and wheel
+python -m build --wheel  # Build wheel only
+```
+
+The wheel will be created in `dist/` and can be installed via `pip install dist/<file>.whl`.
 
 ## Docker Environment
 Start a local ClickHouse service (HTTP: `8123`, native TCP: `9000`):
