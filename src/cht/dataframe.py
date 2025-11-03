@@ -24,12 +24,7 @@ def pandas_dtype_to_clickhouse(dtype: Any) -> str:
         return "UInt8"
     if is_integer_dtype(dtype):
         name = str(dtype).lower()
-        if "int8" in name:
-            return "Int8"
-        if "int16" in name:
-            return "Int16"
-        if "int32" in name:
-            return "Int32"
+        # Check unsigned types first
         if "uint8" in name:
             return "UInt8"
         if "uint16" in name:
@@ -38,6 +33,13 @@ def pandas_dtype_to_clickhouse(dtype: Any) -> str:
             return "UInt32"
         if "uint64" in name:
             return "UInt64"
+        # Then check signed types
+        if "int8" in name:
+            return "Int8"
+        if "int16" in name:
+            return "Int16"
+        if "int32" in name:
+            return "Int32"
         return "Int64"
     if is_float_dtype(dtype):
         name = str(dtype).lower()
@@ -82,7 +84,7 @@ def build_create_table_sql(
         raise ValueError("DataFrame is empty; cannot infer schema.")
     if not table_name:
         raise ValueError("table_name must be provided.")
-    
+
     resolved_types = resolve_column_types(df, column_types)
 
     def _format_identifier(name: str) -> str:
@@ -167,16 +169,16 @@ def insert_dataframe(
     """Insert a pandas DataFrame into an existing ClickHouse table."""
     if df.empty:
         return
-    
+
     df_to_insert = df.copy()
     resolved_types = resolve_column_types(df_to_insert, column_types)
-    
+
     # Handle string columns - fill NaN with empty strings
     for column, ch_type in resolved_types:
         lower_type = ch_type.lower()
         if lower_type.startswith("string") or lower_type.startswith("fixedstring"):
             df_to_insert[column] = df_to_insert[column].fillna("").astype(str)
-    
+
     # Use the cluster's client to insert
     client = cluster.client
     client.insert_df(

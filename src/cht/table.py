@@ -352,64 +352,56 @@ class Table:
     def from_df(
         cls,
         df: pd.DataFrame,
+        cluster: Cluster,
         *,
         database: str = "temp",
         name: Optional[str] = None,
-        cluster: Optional[Cluster] = None,
         create_if_not_exists: bool = True,
         mode: str = "overwrite",
-        engine: str = "MergeTree",
-        order_by: Optional[List[str]] = None,
-        partition_by: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> "Table":
         """
         Create a Table instance from a pandas DataFrame.
-        
+
         Args:
             df: The DataFrame to load
+            cluster: ClickHouse cluster instance
             database: Target database (default: "temp")
             name: Table name (auto-generated if None)
-            cluster: ClickHouse cluster instance
             create_if_not_exists: Whether to create table if it doesn't exist
             mode: "overwrite" (drop/recreate) or "append" (insert into existing)
-            engine: ClickHouse table engine (default: "MergeTree")
-            order_by: Columns for ORDER BY clause
-            partition_by: Columns for PARTITION BY clause
-            **kwargs: Additional arguments passed to create_table_from_dataframe
-        
+            **kwargs: Additional arguments (engine, order_by, partition_by, etc.)
+
         Returns:
             Table instance pointing to the created table
         """
-        from .dataframe import create_table_from_dataframe, generate_temp_table_name, insert_dataframe
-        
-        if not cluster:
-            raise ValueError("cluster parameter is required")
-        
+        from .dataframe import (
+            create_table_from_dataframe,
+            generate_temp_table_name,
+            insert_dataframe,
+        )
+
         if name is None:
             name = generate_temp_table_name()
-        
+
         table = cls(name=name, database=database, cluster=cluster)
-        
+
         if mode == "overwrite":
             # Drop table if it exists
             if table.exists():
                 cluster.query(f"DROP TABLE {table.fqdn}")
-            
+
             # Create and populate table
             create_table_from_dataframe(
                 cluster=cluster,
                 df=df,
                 table_name=name,
                 database=database,
-                engine=engine,
-                order_by=order_by,
-                partition_by=partition_by,
                 if_not_exists=False,
-                **kwargs
+                **kwargs,
             )
             insert_dataframe(cluster=cluster, df=df, table_name=name, database=database)
-            
+
         elif mode == "append":
             # Create table if needed
             if create_if_not_exists and not table.exists():
@@ -418,17 +410,14 @@ class Table:
                     df=df,
                     table_name=name,
                     database=database,
-                    engine=engine,
-                    order_by=order_by,
-                    partition_by=partition_by,
                     if_not_exists=True,
-                    **kwargs
+                    **kwargs,
                 )
-            
+
             # Insert data
             insert_dataframe(cluster=cluster, df=df, table_name=name, database=database)
-            
+
         else:
             raise ValueError(f"mode must be 'overwrite' or 'append', got: {mode}")
-        
+
         return table

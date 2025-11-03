@@ -81,8 +81,9 @@ df = pd.DataFrame({
 # Create table from DataFrame
 temp_table = Table.from_df(
     df, 
-    database="temp", 
     cluster=cluster,
+    database="temp", 
+    name="users",
     mode="overwrite",
     engine="MergeTree",
     order_by=["id"]
@@ -117,9 +118,9 @@ df = pd.DataFrame({
 # Create table with automatic type mapping
 table = Table.from_df(
     df,
+    cluster=cluster,
     database="analytics", 
     name="users",
-    cluster=cluster,
     mode="overwrite",  # or "append"
     engine="MergeTree",
     order_by=["user_id"],
@@ -130,11 +131,9 @@ table = Table.from_df(
 ### Loading Tables to DataFrames
 
 ```python
-# Load entire table
+# Load entire table as DataFrame
 df = table.to_df()
-
-# Or use cluster for custom queries
-df = cluster.client.query_df("SELECT * FROM analytics.users WHERE score > 80")
+print(df)
 ```
 
 ### Type Mapping
@@ -151,24 +150,14 @@ The library automatically maps pandas dtypes to appropriate ClickHouse types:
 | `category` | `String` |
 | `object` | `String` |
 
-### Advanced Usage
+### Mode Options
 
 ```python
-from cht.dataframe import create_table_from_dataframe, insert_dataframe
+# Overwrite mode (default) - drops and recreates table
+table = Table.from_df(df, cluster=cluster, mode="overwrite")
 
-# Direct functions for more control
-create_table_from_dataframe(
-    cluster=cluster,
-    df=df,
-    table_name="custom_table",
-    database="temp",
-    engine="ReplacingMergeTree",
-    order_by=["id", "timestamp"],
-    column_types={"email": "LowCardinality(String)"}  # Override types
-)
-
-# Insert additional data
-insert_dataframe(cluster=cluster, df=new_data, table_name="custom_table", database="temp")
+# Append mode - adds data to existing table
+table = Table.from_df(df, cluster=cluster, mode="append")
 ```
 
 ## Development
