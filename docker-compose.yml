@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8
+    container_name: cht-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_USER: developer
+      CLICKHOUSE_PASSWORD: developer
+      CLICKHOUSE_DB: default
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./docker/init:/docker-entrypoint-initdb.d
+
+volumes:
+  clickhouse-data:
