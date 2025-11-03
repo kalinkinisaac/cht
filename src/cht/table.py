@@ -24,7 +24,7 @@ class Table:
     * backup / restore flows
     * materialised view discovery and replay support
     * basic data hygiene tasks
-    
+
     The Table class supports a default cluster mechanism to avoid specifying
     cluster in every operation. Use Table.set_default_cluster() to set a
     global default, or pass cluster explicitly to override.
@@ -33,7 +33,7 @@ class Table:
     name: str
     database: str = "default"
     cluster: Optional[Cluster] = None
-    
+
     # Class-level default cluster
     _default_cluster: Optional[Cluster] = None
 
@@ -70,10 +70,10 @@ class Table:
     def set_default_cluster(cls, cluster: Cluster) -> None:
         """
         Set the default cluster for all Table instances.
-        
+
         Args:
             cluster: Cluster instance to use as default
-            
+
         Example:
             >>> cluster = Cluster("local", "localhost")
             >>> Table.set_default_cluster(cluster)
@@ -387,25 +387,25 @@ class Table:
     def to_df(self, limit: Optional[int] = None) -> pd.DataFrame:
         """
         Load table data as a pandas DataFrame.
-        
+
         Args:
             limit: Maximum number of rows to return (None = all rows)
-            
+
         Returns:
             DataFrame with table data
-            
+
         Examples:
             >>> table = Table("users", database="analytics", cluster=cluster)
             >>> df = table.to_df()  # All rows
             >>> df_sample = table.to_df(limit=1000)  # First 1000 rows
         """
         cluster = self._require_cluster()
-        
+
         if limit is not None:
             sql = f"SELECT * FROM {self.fqdn} LIMIT {limit}"
         else:
             sql = f"SELECT * FROM {self.fqdn}"
-            
+
         return cluster.client.query_df(sql)
 
     @classmethod
@@ -419,12 +419,12 @@ class Table:
     ) -> tuple[Cluster, str, "Table"]:
         """
         Common logic for creating temporary tables.
-        
+
         Returns:
             tuple: (cluster, table_name, table_instance)
         """
         from .dataframe import generate_temp_table_name
-        
+
         # Use provided cluster or fall back to default
         if cluster is None:
             if cls._default_cluster is None:
@@ -442,7 +442,7 @@ class Table:
 
         # Create the table instance
         table = cls(name, database=database, cluster=cluster)
-        
+
         return cluster, name, table
 
     @classmethod
@@ -457,7 +457,9 @@ class Table:
         """
         if ttl is not None:
             from datetime import datetime, timezone
+
             from .temp_tables import format_expires_at
+
             expires_at = datetime.now(timezone.utc) + ttl
             comment = format_expires_at(expires_at)
             cluster.query(f"ALTER TABLE {table.fqdn} MODIFY COMMENT '{comment}'")
@@ -513,7 +515,7 @@ class Table:
             >>> table = Table.from_df(
             ...     df, cluster,
             ...     database="analytics",
-            ...     name="user_data", 
+            ...     name="user_data",
             ...     ttl=None  # Never expires
             ... )
 
@@ -627,6 +629,7 @@ class Table:
         # Add TTL comment if specified
         if ttl is not None:
             from datetime import datetime, timezone
+
             expires_at = datetime.now(timezone.utc) + ttl
             comment = format_expires_at(expires_at)
             cluster.query(f"ALTER TABLE {table.fqdn} MODIFY COMMENT '{comment}'")

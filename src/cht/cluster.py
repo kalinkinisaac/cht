@@ -275,8 +275,6 @@ class Cluster:
             return pd.DataFrame()
         return pd.DataFrame(result.result_rows, columns=result.column_names)
 
-
-
     # ------------------------------ misc ---------------------------------
     def __repr__(self) -> str:  # pragma: no cover - trivial
         mode = "read-only" if self.read_only else "read-write"
