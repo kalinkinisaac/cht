@@ -44,6 +44,10 @@ class Table:
                 format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
             )
 
+    def __str__(self) -> str:
+        """Return the fully qualified table name (database.table)."""
+        return self.fqdn
+
     # ----------------------------- properties -----------------------------
     @property
     def fqdn(self) -> str:
