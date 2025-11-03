@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -384,10 +384,83 @@ class Table:
         )
 
     # --------------------------- DataFrame methods -----------------------
-    def to_df(self) -> pd.DataFrame:
-        """Load the entire table as a pandas DataFrame."""
+    def to_df(self, limit: Optional[int] = None) -> pd.DataFrame:
+        """
+        Load table data as a pandas DataFrame.
+        
+        Args:
+            limit: Maximum number of rows to return (None = all rows)
+            
+        Returns:
+            DataFrame with table data
+            
+        Examples:
+            >>> table = Table("users", database="analytics", cluster=cluster)
+            >>> df = table.to_df()  # All rows
+            >>> df_sample = table.to_df(limit=1000)  # First 1000 rows
+        """
         cluster = self._require_cluster()
-        return cluster.client.query_df(f"SELECT * FROM {self.fqdn}")
+        
+        if limit is not None:
+            sql = f"SELECT * FROM {self.fqdn} LIMIT {limit}"
+        else:
+            sql = f"SELECT * FROM {self.fqdn}"
+            
+        return cluster.client.query_df(sql)
+
+    @classmethod
+    def _create_temp_table_common(
+        cls,
+        cluster: Optional[Cluster] = None,
+        *,
+        database: str = "temp",
+        name: Optional[str] = None,
+        ttl: Optional[timedelta] = timedelta(days=1),
+    ) -> tuple[Cluster, str, "Table"]:
+        """
+        Common logic for creating temporary tables.
+        
+        Returns:
+            tuple: (cluster, table_name, table_instance)
+        """
+        from .dataframe import generate_temp_table_name
+        
+        # Use provided cluster or fall back to default
+        if cluster is None:
+            if cls._default_cluster is None:
+                raise RuntimeError(
+                    "Table operation requires a cluster. Either pass cluster=... "
+                    "or use Table.set_default_cluster() to set a global default."
+                )
+            cluster = cls._default_cluster
+
+        assert name is None or isinstance(name, str), "name must be a string or None"
+
+        # Generate table name if not provided
+        if name is None:
+            name = generate_temp_table_name()
+
+        # Create the table instance
+        table = cls(name, database=database, cluster=cluster)
+        
+        return cluster, name, table
+
+    @classmethod
+    def _add_ttl_comment(
+        cls,
+        cluster: Cluster,
+        table: "Table",
+        ttl: Optional[timedelta],
+    ) -> None:
+        """
+        Add TTL comment to table if specified.
+        """
+        if ttl is not None:
+            from datetime import datetime, timezone
+            from .temp_tables import format_expires_at
+            expires_at = datetime.now(timezone.utc) + ttl
+            comment = format_expires_at(expires_at)
+            cluster.query(f"ALTER TABLE {table.fqdn} MODIFY COMMENT '{comment}'")
 
     @classmethod
     def from_df(
@@ -448,6 +521,51 @@ class Table:
             >>> Table.set_default_cluster(cluster)
             >>> table = Table.from_df(df)  # No cluster needed!
         """
+        from .dataframe import create_table_from_dataframe, insert_dataframe
+
+        # Use common setup logic
+        cluster, name, table = cls._create_temp_table_common(
+            cluster=cluster, database=database, name=name, ttl=ttl
+        )
+
+        if mode == "overwrite":
+            # Drop table if it exists
+            if table.exists():
+                cluster.query(f"DROP TABLE {table.fqdn}")
+
+            # Create and populate table
+            create_table_from_dataframe(
+                cluster=cluster,
+                df=df,
+                table_name=name,
+                database=database,
+                if_not_exists=False,
+                **kwargs,
+            )
+            insert_dataframe(cluster=cluster, df=df, table_name=name, database=database)
+
+        elif mode == "append":
+            # Create table if needed
+            if create_if_not_exists and not table.exists():
+                create_table_from_dataframe(
+                    cluster=cluster,
+                    df=df,
+                    table_name=name,
+                    database=database,
+                    if_not_exists=True,
+                    **kwargs,
+                )
+
+            # Insert data
+            insert_dataframe(cluster=cluster, df=df, table_name=name, database=database)
+
+        else:
+            raise ValueError(f"mode must be 'overwrite' or 'append', got: {mode}")
+
+        # Add TTL comment using common logic
+        cls._add_ttl_comment(cluster, table, ttl)
+
+        return table
         from .dataframe import (
             create_table_from_dataframe,
             generate_temp_table_name,
@@ -512,5 +630,95 @@ class Table:
             expires_at = datetime.now(timezone.utc) + ttl
             comment = format_expires_at(expires_at)
             cluster.query(f"ALTER TABLE {table.fqdn} MODIFY COMMENT '{comment}'")
+
+        return table
+
+    @classmethod
+    def from_query(
+        cls,
+        query: str,
+        cluster: Optional[Cluster] = None,
+        *,
+        database: str = "temp",
+        name: Optional[str] = None,
+        ttl: Optional[timedelta] = timedelta(days=1),
+        order_by: Optional[Union[str, list[str]]] = None,
+        on_cluster: Optional[str] = None,
+        **kwargs: Any,
+    ) -> "Table":
+        """
+        Create a Table instance from a SQL query with optional TTL expiration.
+
+        This method creates a table using CREATE TABLE AS SELECT pattern, allowing you
+        to create tables directly from SQL queries with automatic TTL management.
+
+        Args:
+            query: SQL SELECT query to populate the table
+            cluster: ClickHouse cluster instance (uses default if None)
+            database: Target database (default: "temp")
+            name: Table name (auto-generated with unique suffix if None)
+            ttl: Time to live for automatic cleanup (None = permanent, default: 1 day)
+            order_by: ORDER BY columns for MergeTree engines
+            on_cluster: Cluster name for distributed tables
+            **kwargs: Additional table options (currently unused)
+
+        Returns:
+            Table instance pointing to the created table with TTL management
+
+        Examples:
+            >>> # Simple query-based table (expires in 1 day)
+            >>> table = Table.from_query(
+            ...     "SELECT user_id, COUNT(*) as events FROM events GROUP BY user_id",
+            ...     cluster
+            ... )
+            >>> print(table.fqdn)  # temp.tmp_a1b2c3d4
+
+            >>> # Custom TTL and ordering
+            >>> table = Table.from_query(
+            ...     "SELECT * FROM events WHERE date = '2023-01-01'",
+            ...     cluster,
+            ...     name="events_jan_01",
+            ...     ttl=timedelta(hours=6),  # Expires in 6 hours
+            ...     order_by=["timestamp", "user_id"]
+            ... )
+
+            >>> # Permanent analytical table
+            >>> table = Table.from_query(
+            ...     "SELECT region, SUM(revenue) as total FROM sales GROUP BY region",
+            ...     cluster,
+            ...     database="analytics",
+            ...     name="revenue_by_region",
+            ...     ttl=None,  # Never expires
+            ...     order_by=["total DESC"]
+            ... )
+
+            >>> # Using default cluster
+            >>> Table.set_default_cluster(cluster)
+            >>> table = Table.from_query(
+            ...     "SELECT * FROM users WHERE active = 1"
+            ... )  # No cluster needed!
+        """
+        from .temp_tables import create_temp_table_sql
+
+        # Use common setup logic
+        cluster, name, table = cls._create_temp_table_common(
+            cluster=cluster, database=database, name=name, ttl=ttl
+        )
+
+        # Build CREATE TABLE AS SELECT SQL
+        create_sql, alter_sql = create_temp_table_sql(
+            query=query,
+            table_name=name,
+            database=database,
+            ttl=ttl,
+            order_by=order_by,
+            on_cluster=on_cluster,
+        )
+
+        # Execute CREATE TABLE AS SELECT
+        cluster.query(create_sql)
+
+        # Add TTL comment using common logic
+        cls._add_ttl_comment(cluster, table, ttl)
 
         return table

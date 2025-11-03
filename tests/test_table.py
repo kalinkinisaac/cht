@@ -195,7 +195,7 @@ def test_table_from_df_requires_cluster():
     from cht.table import Table
     Table.clear_default_cluster()
 
-    with pytest.raises(RuntimeError, match="Table.from_df\\(\\) requires a cluster"):
+    with pytest.raises(RuntimeError, match="Table operation requires a cluster"):
         Table.from_df(df, cluster=None)
 def test_table_from_df_invalid_mode():
     """Test that invalid mode raises ValueError."""
