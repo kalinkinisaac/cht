@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from cht.table import Table
 
 
@@ -22,7 +20,7 @@ def make_cluster(responses):
 
 
 def test_table_exists_true():
-    cluster = make_cluster([[(1,)]] )
+    cluster = make_cluster([[(1,)]])
     table = Table(name="events", cluster=cluster)
     assert table.exists() is True
     cluster.query.assert_called_with("EXISTS TABLE default.events")

@@ -6,7 +6,6 @@ import pytest
 
 from cht.sql_utils import (
     extract_from_tables,
-    format_identifier,
     generate_cityhash_query,
     get_table_columns,
     parse_from_table,

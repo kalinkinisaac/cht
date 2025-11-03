@@ -36,7 +36,7 @@ jobs:
         run: pytest -v --tb=short
 
       - name: Test import
-        run: python -c "import cht; print('✅ Package imports successfully')"
+        run: python -c "import cht; print('Package imports successfully')"
 
   code-quality:
     name: Code Quality

@@ -46,7 +46,9 @@ def extract_from_tables(sql_query: str) -> list[str]:
     return sorted(tables)
 
 
-def parse_to_table(create_query: str, default_db: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
+def parse_to_table(
+    create_query: str, default_db: Optional[str] = None
+) -> tuple[Optional[str], Optional[str]]:
     """
     Extract the ``TO`` table (database, table) tuple from a ``CREATE MATERIALIZED VIEW`` statement.
     """
@@ -102,10 +104,7 @@ def generate_cityhash_query(
 
     column_list = ", ".join(columns)
     select_prefix = "SELECT distinct" if distinct else "SELECT"
-    query = (
-        f"{select_prefix} cityHash64({column_list}) AS row_hash\n"
-        f"FROM {table_expression}"
-    )
+    query = f"{select_prefix} cityHash64({column_list}) AS row_hash\n" f"FROM {table_expression}"
     if where:
         query += f"\nWHERE {where}"
     return query
@@ -114,7 +113,9 @@ def generate_cityhash_query(
 ConnectionLike = Union["Cluster", Client]
 
 
-def get_table_columns(connection: ConnectionLike, table_name: str, database: str = "default") -> list[str]:
+def get_table_columns(
+    connection: ConnectionLike, table_name: str, database: str = "default"
+) -> list[str]:
     """
     Retrieve physical column names for a ClickHouse table.
 
@@ -148,6 +149,4 @@ def remote_expression(
     """
     Construct a ClickHouse ``remote()`` table function expression.
     """
-    return (
-        f"remote('{host}', {database}.{table}, '{user}', '{password}', {port})"
-    )
+    return f"remote('{host}', {database}.{table}, '{user}', '{password}', {port})"

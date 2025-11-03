@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import difflib
 import re
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from .cluster import Cluster
 
@@ -58,9 +58,7 @@ def batch_update_consumer_groups(
     result: Dict[Tuple[str, str], str] = {}
     for key, new_group in updates.items():
         create_stmt = original_statements[key]
-        result[key] = generate_kafka_consumer_group_update(
-            create_stmt, new_group=new_group
-        )
+        result[key] = generate_kafka_consumer_group_update(create_stmt, new_group=new_group)
     return result
 
 
@@ -80,9 +78,7 @@ def replace_kafka_consumer_groups(
         fqdn = f"{db}.{table}"
         create_stmt = cluster.query(f"SHOW CREATE TABLE {fqdn}")[0][0]
         try:
-            new_stmt = generate_kafka_consumer_group_update(
-                create_stmt, new_group=new_group_name
-            )
+            new_stmt = generate_kafka_consumer_group_update(create_stmt, new_group=new_group_name)
         except ValueError:
             operations.append((db, table, "skipped:no-group"))
             continue

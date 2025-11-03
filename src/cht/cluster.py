@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from time import time, strftime
+from time import strftime, time
 from typing import Callable, Iterable, Optional
 
 import clickhouse_connect
@@ -47,8 +47,9 @@ class Cluster:
         verify: bool = False,
         log_sql_text: bool = True,
         log_sql_truncate: int = 4000,
-        client_factory: Callable[..., clickhouse_connect.driver.client.Client]
-        = clickhouse_connect.get_client,
+        client_factory: Callable[
+            ..., clickhouse_connect.driver.client.Client
+        ] = clickhouse_connect.get_client,
     ) -> None:
         self.name = name
         self.host = host
@@ -78,7 +79,8 @@ class Cluster:
             settings = {"readonly": 1} if self.read_only else {}
 
             _logger.info(
-                "Establishing connection | cluster=%s host=%s:%s user=%s secure=%s verify=%s read_only=%s",
+                "Establishing connection | cluster=%s host=%s:%s user=%s secure=%s "
+                "verify=%s read_only=%s",
                 self.name,
                 self.host,
                 self.port,
@@ -226,9 +228,12 @@ class Cluster:
                     SELECT sum(bytes_on_disk) FROM system.parts WHERE active
                 ), 2) || '%)' AS total_size,
             formatReadableSize(sumIf(p.bytes_on_disk, p.disk_name = 'default')) || ' (' ||
-                round(100 * sumIf(p.bytes_on_disk, p.disk_name = 'default') / sum(p.bytes_on_disk), 2) || '%)' AS on_default,
+                round(100 * sumIf(p.bytes_on_disk, p.disk_name = 'default') /
+                      sum(p.bytes_on_disk), 2)
+                || '%)' AS on_default,
             formatReadableSize(sumIf(p.bytes_on_disk, p.disk_name = 'hdd_1')) || ' (' ||
-                round(100 * sumIf(p.bytes_on_disk, p.disk_name = 'hdd_1') / sum(p.bytes_on_disk), 2) || '%)' AS on_hdd_1
+                round(100 * sumIf(p.bytes_on_disk, p.disk_name = 'hdd_1') / sum(p.bytes_on_disk), 2)
+                || '%)' AS on_hdd_1
         FROM system.parts p
         WHERE p.active AND p.database = '{database}'
         GROUP BY p.table
@@ -253,7 +258,9 @@ class Cluster:
                     WHERE active AND database = '{database}' AND table = '{table}'
                 ), 2) || '%)' AS compressed_size,
             formatReadableSize(sum(column_data_uncompressed_bytes)) AS uncompressed_size,
-            round(sum(column_data_uncompressed_bytes) / nullIf(sum(column_data_compressed_bytes), 0), 2) AS compression_ratio
+            round(sum(column_data_uncompressed_bytes) /
+                  nullIf(sum(column_data_compressed_bytes), 0), 2)
+                AS compression_ratio
         FROM system.parts_columns
         WHERE active AND database = '{database}' AND table = '{table}'
         GROUP BY column

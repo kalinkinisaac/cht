@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from time import time
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, Optional, Sequence
 
 from .cluster import Cluster
 from .sql_utils import format_identifier
@@ -48,9 +48,7 @@ def rebuild_table_via_mv(
     )
 
     try:
-        rows_after = cluster.query(
-            f"SELECT count() FROM {format_identifier(db, table)}"
-        )[0][0]
+        rows_after = cluster.query(f"SELECT count() FROM {format_identifier(db, table)}")[0][0]
     except Exception:  # pragma: no cover - defensive for flaky clusters
         rows_after = None
 
@@ -144,7 +142,8 @@ def sync_missing_rows_by_date(
     """
 
     print(
-        f"Running sync for `{origin_table.fqdn}` → `{remote_table.fqdn}` with filter `{effective_filter}`"
+        f"Running sync for `{origin_table.fqdn}` → `{remote_table.fqdn}` "
+        f"with filter `{effective_filter}`"
     )
     if test_run:
         print("Test run: INSERT query:")
@@ -194,9 +193,7 @@ def analyze_and_remove_duplicates(
     hash_expr = f"cityHash64({', '.join(f'`{col}`' for col in columns)})"
     date_filter = f"toDate({time_col}) = toDate('{date}')"
 
-    total_rows = cluster.query(
-        f"SELECT count() FROM {table.fqdn} WHERE {date_filter}"
-    )[0][0]
+    total_rows = cluster.query(f"SELECT count() FROM {table.fqdn} WHERE {date_filter}")[0][0]
     unique_rows = cluster.query(
         f"SELECT count(DISTINCT {hash_expr}) FROM {table.fqdn} WHERE {date_filter}"
     )[0][0]

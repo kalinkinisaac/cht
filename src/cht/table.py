@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .cluster import Cluster
 from .sql_utils import format_identifier, remote_expression, rows_to_list
@@ -173,7 +173,8 @@ class Table:
             bak_rows = cluster.query(f"SELECT count() FROM {fq_backup}")[0][0]
             if int(src_rows) != int(bak_rows):
                 raise AssertionError(
-                    f"Row count mismatch between {self.fqdn} ({src_rows}) and {fq_backup} ({bak_rows})"
+                    f"Row count mismatch between {self.fqdn} ({src_rows}) "
+                    f"and {fq_backup} ({bak_rows})"
                 )
         _logger.info("[verify_backup] OK %s -> %s", self.fqdn, fq_backup)
 
@@ -182,7 +183,9 @@ class Table:
         _logger.warning("[truncate] %s", self.fqdn)
         cluster.query(f"TRUNCATE TABLE {self.fqdn}")
 
-    def restore_from_backup(self, backup_suffix: str = "_backup", *, drop_backup: bool = False) -> None:
+    def restore_from_backup(
+        self, backup_suffix: str = "_backup", *, drop_backup: bool = False
+    ) -> None:
         cluster = self._require_cluster()
         backup_name = f"{self.name}{backup_suffix}"
         fq_backup = format_identifier(self.database, backup_name)
@@ -220,8 +223,7 @@ class Table:
             f" TO '{self.database}'.'{self.name}' ",
         ]
         pattern_sql = " OR ".join(
-            f"positionCaseInsensitive(create_table_query, {repr(p)}) > 0"
-            for p in patterns
+            f"positionCaseInsensitive(create_table_query, {repr(p)}) > 0" for p in patterns
         )
         sql = f"""
         SELECT database, name
@@ -299,26 +301,21 @@ class Table:
             estimated_rows = None
         else:
             if not (replay_from_db and replay_from_table):
-                raise ValueError(
-                    "Provide replay_from_db+replay_from_table or replay_select_sql."
-                )
+                raise ValueError("Provide replay_from_db+replay_from_table or replay_select_sql.")
             fq_source = format_identifier(replay_from_db, replay_from_table)
             where_clause = f" WHERE {where}" if where else ""
-            source_columns = [
-                row[0] for row in cluster.query(f"DESCRIBE TABLE {fq_source}")
-            ]
+            source_columns = [row[0] for row in cluster.query(f"DESCRIBE TABLE {fq_source}")]
             missing = [col for col in src_columns if col not in source_columns]
             if missing:
                 raise AssertionError(
-                    f"Source table {fq_source} missing columns required by MV source {fq_mv_src}: {missing}"
+                    f"Source table {fq_source} missing columns required by MV source "
+                    f"{fq_mv_src}: {missing}"
                 )
             insert_sql = (
                 f"INSERT INTO {fq_mv_src} ({column_csv}) "
                 f"SELECT {column_csv} FROM {fq_source}{where_clause}"
             )
-            estimated_rows = cluster.query(
-                f"SELECT count() FROM {fq_source}{where_clause}"
-            )[0][0]
+            estimated_rows = cluster.query(f"SELECT count() FROM {fq_source}{where_clause}")[0][0]
 
         if truncate_mv_source_first:
             cluster.query(f"TRUNCATE TABLE {fq_mv_src}")
