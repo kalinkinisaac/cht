@@ -153,6 +153,219 @@ print('✓ Connected to ClickHouse')
 docker compose down
 ```
 
+### **Comprehensive Local Testing Guide**
+
+#### **Pre-Commit Testing Workflow** 
+
+Before making any commit, run this complete testing sequence:
+
+```bash
+# 1. Activate virtual environment
+source .venv/bin/activate
+
+# 2. Install package in development mode (if not already done)
+pip install -e .
+
+# 3. Run full test suite
+pytest -v
+
+# 4. Check code formatting
+black --check src/ tests/
+
+# 5. Check import sorting
+isort --check-only src/ tests/
+
+# 6. Check code style
+flake8 src/ tests/ --max-line-length=100 --extend-ignore=E203,W503
+
+# 7. Verify version consistency (before version bumps)
+python -c "
+import re
+with open('pyproject.toml') as f:
+    content = f.read()
+    match = re.search(r'version = \"([^\"]+)\"', content)
+    pyproject_version = match.group(1) if match else 'NOT_FOUND'
+
+from src.cht import __version__ as code_version
+print(f'pyproject.toml: {pyproject_version}')
+print(f'__init__.py: {code_version}')
+print(f'Versions match: {pyproject_version == code_version}')
+"
+```
+
+#### **Quick Test Commands**
+
+```bash
+# Fast: Run only unit tests (no Docker required)
+pytest tests/ -v
+
+# Medium: Run with coverage report
+pytest --cov=cht --cov-report=term-missing
+
+# Detailed: Generate HTML coverage report
+pytest --cov=cht --cov-report=html
+# View at: htmlcov/index.html
+
+# Specific: Run single test file
+pytest tests/test_table.py -v
+
+# Debug: Run specific test with detailed output
+pytest tests/test_table.py::test_table_from_df_overwrite_mode -v -s
+
+# Performance: Run tests with timing
+pytest --durations=10
+```
+
+#### **Code Quality Checks**
+
+```bash
+# Auto-fix formatting issues
+black src/ tests/
+
+# Auto-fix import sorting
+isort src/ tests/
+
+# Check for style issues (manual fixes required)
+flake8 src/ tests/ --max-line-length=100 --extend-ignore=E203,W503
+
+# Run all quality checks in one command
+black --check src/ tests/ && \
+isort --check-only src/ tests/ && \
+flake8 src/ tests/ --max-line-length=100 --extend-ignore=E203,W503 && \
+echo "✅ All quality checks passed!"
+```
+
+#### **Feature Testing**
+
+When adding new features, test them comprehensively:
+
+```bash
+# Test new Table functionality
+python -c "
+from src.cht import Table, Cluster
+
+# Test string representation
+table = Table('events', 'analytics')
+print(f'str(table): {str(table)}')
+print(f'repr(table): {repr(table)}')
+
+# Test FQDN consistency
+assert str(table) == table.fqdn
+print('✅ String representation working correctly')
+
+# Test available methods
+print('Available methods:')
+print(f'- from_df: {hasattr(Table, \"from_df\")}')
+print(f'- from_query: {hasattr(Table, \"from_query\")}')
+print(f'- to_df with limit: {\"limit\" in table.to_df.__code__.co_varnames}')
+"
+
+# Test version consistency
+python -c "
+from src.cht import __version__
+print(f'CHT version: {__version__}')
+"
+```
+
+#### **Integration Testing with Docker**
+
+```bash
+# 1. Start ClickHouse (required for integration tests)
+docker compose up -d
+
+# Wait for ClickHouse to be ready
+sleep 10
+
+# 2. Test connection
+python -c "
+from src.cht import Cluster
+try:
+    cluster = Cluster(name='test', host='localhost', user='developer', password='developer')
+    result = cluster.query('SELECT 1')
+    print('✅ ClickHouse connection successful')
+    print(f'Test query result: {result}')
+except Exception as e:
+    print(f'❌ ClickHouse connection failed: {e}')
+    exit(1)
+"
+
+# 3. Run integration tests
+python test_docker_integration.py
+
+# 4. Test DataFrame integration
+python example_complete_workflow.py
+
+# 5. Cleanup
+docker compose down
+```
+
+#### **Performance Testing**
+
+```bash
+# Test with different dataset sizes
+python -c "
+import pandas as pd
+import time
+from src.cht import Table
+
+# Create test DataFrames of different sizes
+sizes = [100, 1000, 10000]
+for size in sizes:
+    df = pd.DataFrame({
+        'id': range(size),
+        'value': [f'test_{i}' for i in range(size)]
+    })
+    
+    start = time.time()
+    # Test type resolution performance
+    from src.cht.dataframe import resolve_column_types
+    types = resolve_column_types(df)
+    duration = time.time() - start
+    
+    print(f'Size {size:5d}: {duration:.4f}s - Types: {types}')
+"
+```
+
+#### **Release Testing Checklist**
+
+Before creating a release, verify:
+
+```bash
+# ✅ All tests pass
+pytest -v --tb=short
+
+# ✅ Code quality
+black --check src/ tests/
+isort --check-only src/ tests/
+flake8 src/ tests/ --max-line-length=100 --extend-ignore=E203,W503
+
+# ✅ Version consistency
+python -c "
+import re
+with open('pyproject.toml') as f:
+    content = f.read()
+    match = re.search(r'version = \"([^\"]+)\"', content)
+    pyproject_version = match.group(1) if match else 'NOT_FOUND'
+
+from src.cht import __version__ as code_version
+assert pyproject_version == code_version, f'Version mismatch: {pyproject_version} != {code_version}'
+print(f'✅ Version consistency verified: {code_version}')
+"
+
+# ✅ Package builds correctly
+python -m build --wheel
+echo "✅ Package builds successfully"
+
+# ✅ Installation works
+pip install git+https://github.com/kalinkinisaac/cht.git --force-reinstall --quiet
+python -c "import cht; print(f'✅ Installation successful: CHT v{cht.__version__}')"
+
+# ✅ All examples work
+python example_complete_workflow.py
+python demo_unified_api.py
+echo "✅ Examples work correctly"
+```
+
 ## Project Structure
 
 ```
@@ -372,25 +585,280 @@ print(f'Match: {pyproject_version == code_version}')
 "
 ```
 
-### **Release Workflow**
+### **Complete Local Deployment Procedure**
 
-#### **Step 1: Prepare Release Commit**
+#### **Step 0: Pre-Deployment Verification**
+
+Run the full testing suite locally before any deployment:
 
 ```bash
-# 1. Create feature branch (optional for direct main pushes)
-git checkout -b release/v0.4.1
+# Activate environment
+source .venv/bin/activate
 
-# 2. Update versions (see above)
-# 3. Update documentation if needed
+# Complete quality assurance check
+echo "🔍 Running complete pre-deployment checks..."
 
-# 4. Commit version changes
+# 1. Full test suite
+echo "📋 Running tests..."
+pytest -v || (echo "❌ Tests failed!" && exit 1)
+
+# 2. Code quality
+echo "🎨 Checking code formatting..."
+black --check src/ tests/ || (echo "❌ Black formatting failed!" && exit 1)
+
+echo "📦 Checking import sorting..."
+isort --check-only src/ tests/ || (echo "❌ isort failed!" && exit 1)
+
+echo "🔍 Checking code style..."
+flake8 src/ tests/ --max-line-length=100 --extend-ignore=E203,W503 || (echo "❌ flake8 failed!" && exit 1)
+
+# 3. Version consistency check (before version bump)
+echo "🏷️  Checking current version consistency..."
+python -c "
+import re
+with open('pyproject.toml') as f:
+    content = f.read()
+    match = re.search(r'version = \"([^\"]+)\"', content)
+    pyproject_version = match.group(1) if match else 'NOT_FOUND'
+
+from src.cht import __version__ as code_version
+print(f'Current pyproject.toml: {pyproject_version}')
+print(f'Current __init__.py: {code_version}')
+assert pyproject_version == code_version, f'Version mismatch: {pyproject_version} != {code_version}'
+print('✅ Current versions are consistent')
+"
+
+echo "✅ All pre-deployment checks passed!"
+```
+
+### **Release Workflow**
+
+#### **Step 1: Version Update and Testing**
+
+```bash
+# 1. Determine new version (example: 0.4.2 -> 0.4.3)
+CURRENT_VERSION="0.4.2"
+NEW_VERSION="0.4.3"
+
+echo "🚀 Preparing release ${NEW_VERSION}"
+
+# 2. Update version in pyproject.toml
+sed -i '' "s/version = \"${CURRENT_VERSION}\"/version = \"${NEW_VERSION}\"/" pyproject.toml
+
+# 3. Update version in __init__.py
+sed -i '' "s/__version__ = \"${CURRENT_VERSION}\"/__version__ = \"${NEW_VERSION}\"/" src/cht/__init__.py
+
+# 4. Verify version update
+echo "🔍 Verifying version update..."
+python -c "
+import re
+with open('pyproject.toml') as f:
+    content = f.read()
+    match = re.search(r'version = \"([^\"]+)\"', content)
+    pyproject_version = match.group(1) if match else 'NOT_FOUND'
+
+from src.cht import __version__ as code_version
+print(f'Updated pyproject.toml: {pyproject_version}')
+print(f'Updated __init__.py: {code_version}')
+assert pyproject_version == code_version == '${NEW_VERSION}', f'Version update failed'
+print('✅ Version update successful')
+"
+
+# 5. Test with new version
+echo "🧪 Testing with new version..."
+pytest -v || (echo "❌ Tests failed with new version!" && exit 1)
+
+# 6. Build and test package
+echo "📦 Building package..."
+python -m build --wheel || (echo "❌ Package build failed!" && exit 1)
+echo "✅ Package built successfully"
+```
+
+#### **Step 2: Commit and Tag Creation**
+
+```bash
+# 1. Commit version changes
 git add pyproject.toml src/cht/__init__.py
-git commit -m "bump: Update version to 0.4.1"
+git commit -m "bump: Update version to ${NEW_VERSION}
 
-# 5. Push to main (or merge PR)
-git checkout main
-git merge release/v0.4.1  # or push branch and create PR
+- Version consistency verified across all files
+- All tests passing (88/88)
+- Code quality checks passed
+- Package build successful"
+
+# 2. Push version commit
 git push origin main
+
+# 3. Create comprehensive release tag
+git tag -a v${NEW_VERSION} -m "🚀 CHT v${NEW_VERSION} - [RELEASE TITLE]
+
+✨ New Features:
+- [List new features here]
+- [Example: Enhanced Table string representation]
+
+🔧 Improvements:
+- [List improvements here]
+- [Example: Better logging integration]
+
+🐛 Bug Fixes:
+- [List bug fixes here]
+
+📋 Quality Assurance:
+- ✅ All 88 tests passing (100% success rate)
+- ✅ Black formatting compliance
+- ✅ isort import sorting compliance  
+- ✅ flake8 linting compliance
+- ✅ Version consistency verified
+- ✅ Package build successful
+
+📦 Installation:
+pip install git+https://github.com/kalinkinisaac/cht.git
+
+🧪 Verification:
+python -c \"import cht; print(f'CHT version: {cht.__version__}')\"
+
+📚 Full API:
+- Table.from_df() - Create table from DataFrame
+- Table.from_query() - Create table from SQL query  
+- Table.to_df(limit=N) - Load data with row limits
+- Enhanced functionality as described above"
+
+echo "✅ Tag v${NEW_VERSION} created with comprehensive description"
+```
+
+#### **Step 3: Deployment and Verification**
+
+```bash
+# 1. Push tag to trigger GitHub Actions
+echo "🚀 Deploying v${NEW_VERSION}..."
+git push origin v${NEW_VERSION}
+
+# 2. Monitor GitHub Actions
+echo "👀 Monitoring GitHub Actions..."
+echo "Visit: https://github.com/kalinkinisaac/cht/actions"
+echo "Expected workflow: Build and test on tag push"
+
+# 3. Wait for GitHub Actions to complete (optional: use GitHub CLI)
+# gh run list --limit 5
+# gh run watch
+
+# 4. Verify deployment success
+echo "🔍 Verifying deployment..."
+
+# Wait a moment for tag to propagate
+sleep 30
+
+# Test installation from GitHub
+echo "📦 Testing installation from GitHub..."
+pip install git+https://github.com/kalinkinisaac/cht.git --force-reinstall --quiet
+
+# Verify correct version installed
+python -c "
+import cht
+installed_version = cht.__version__
+expected_version = '${NEW_VERSION}'
+print(f'Installed version: {installed_version}')
+print(f'Expected version: {expected_version}')
+assert installed_version == expected_version, f'Version mismatch: {installed_version} != {expected_version}'
+print('✅ Correct version installed from GitHub')
+"
+
+# Test core functionality
+echo "🧪 Testing core functionality..."
+python -c "
+import cht
+
+# Test string representation
+table = cht.Table('test', 'analytics')
+assert str(table) == 'analytics.test'
+print('✅ Table string representation working')
+
+# Test available methods
+assert hasattr(cht.Table, 'from_df')
+assert hasattr(cht.Table, 'from_query')
+print('✅ All expected methods available')
+
+print('🎉 Deployment verification successful!')
+"
+
+echo "✅ Release v${NEW_VERSION} deployed and verified successfully!"
+echo "📋 Next steps:"
+echo "   - Check GitHub release page: https://github.com/kalinkinisaac/cht/releases"
+echo "   - Update documentation if needed"
+echo "   - Communicate release to users"
+```
+
+#### **Quick Deployment Script**
+
+For experienced developers, here's a complete deployment script:
+
+```bash
+#!/bin/bash
+# deploy.sh - Complete CHT deployment script
+
+set -e  # Exit on any error
+
+# Configuration
+CURRENT_VERSION="0.4.2"
+NEW_VERSION="0.4.3"
+RELEASE_TITLE="Enhanced Features"
+
+echo "🚀 CHT Deployment Script - v${CURRENT_VERSION} → v${NEW_VERSION}"
+
+# Pre-deployment checks
+echo "🔍 Pre-deployment verification..."
+source .venv/bin/activate
+pytest -v
+black --check src/ tests/
+isort --check-only src/ tests/
+flake8 src/ tests/ --max-line-length=100 --extend-ignore=E203,W503
+
+# Version update
+echo "🏷️  Updating version..."
+sed -i '' "s/version = \"${CURRENT_VERSION}\"/version = \"${NEW_VERSION}\"/" pyproject.toml
+sed -i '' "s/__version__ = \"${CURRENT_VERSION}\"/__version__ = \"${NEW_VERSION}\"/" src/cht/__init__.py
+
+# Post-update testing
+echo "🧪 Testing with new version..."
+pytest -v
+python -m build --wheel
+
+# Git operations
+echo "📝 Creating release commit and tag..."
+git add pyproject.toml src/cht/__init__.py
+git commit -m "bump: Update version to ${NEW_VERSION}"
+git push origin main
+
+git tag -a v${NEW_VERSION} -m "🚀 CHT v${NEW_VERSION} - ${RELEASE_TITLE}
+
+✨ New Features:
+- [Add your features here]
+
+🔧 Improvements:
+- [Add your improvements here]
+
+📋 Quality Assurance:
+- ✅ All tests passing
+- ✅ Code quality verified
+- ✅ Version consistency confirmed
+
+📦 Installation:
+pip install git+https://github.com/kalinkinisaac/cht.git"
+
+git push origin v${NEW_VERSION}
+
+# Verification
+echo "🔍 Verifying deployment..."
+sleep 30
+pip install git+https://github.com/kalinkinisaac/cht.git --force-reinstall --quiet
+python -c "import cht; assert cht.__version__ == '${NEW_VERSION}'; print('✅ Deployment successful!')"
+
+echo "🎉 CHT v${NEW_VERSION} deployed successfully!"
+```
+
+Make the script executable:
+```bash
+chmod +x deploy.sh
 ```
 
 #### **Step 2: Create and Push Git Tag**
