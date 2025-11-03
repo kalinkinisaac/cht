@@ -28,6 +28,7 @@ print("cht version:", cht.__version__)
 ## Features
 - `Cluster` wrapper with structured logging, bulk execution helper, and disk usage introspection.
 - `Table` convenience API for backups, restore flows, MV replay, and metadata inspection.
+- **DataFrame integration** for seamless pandas ↔ ClickHouse workflows with automatic type mapping.
 - High‑level operations (`rebuild_table_via_mv`, duplicate analysis, row sync utilities).
 - Kafka tooling for consumer group rotation and CREATE TABLE diffing.
 - Lightweight SQL helpers (identifier formatting, `remote()` builder, hash comparison scaffolding).
@@ -61,12 +62,113 @@ pip install -e .
 ### Quick Start Example
 ```python
 from cht import Cluster, Table
+import pandas as pd
 
 cluster = Cluster(name="local", host="localhost", user="developer", password="developer")
-table = Table("events", database="analytics", cluster=cluster)
 
+# Traditional table operations
+table = Table("events", database="analytics", cluster=cluster)
 if table.exists():
     print("Columns:", table.get_columns())
+
+# DataFrame integration
+df = pd.DataFrame({
+    "id": [1, 2, 3],
+    "name": ["Alice", "Bob", "Charlie"],
+    "timestamp": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-03"])
+})
+
+# Create table from DataFrame
+temp_table = Table.from_df(
+    df, 
+    database="temp", 
+    cluster=cluster,
+    mode="overwrite",
+    engine="MergeTree",
+    order_by=["id"]
+)
+
+# Load table back to DataFrame
+result_df = temp_table.to_df()
+print(result_df)
+```
+
+## DataFrame Integration
+
+The library provides seamless integration between pandas DataFrames and ClickHouse tables with automatic type mapping and table creation.
+
+### Creating Tables from DataFrames
+
+```python
+import pandas as pd
+from cht import Cluster, Table
+
+cluster = Cluster(name="local", host="localhost", user="developer", password="developer")
+
+# Sample DataFrame
+df = pd.DataFrame({
+    "user_id": [1, 2, 3, 4],
+    "email": ["alice@example.com", "bob@example.com", "charlie@example.com", "diana@example.com"],
+    "created_at": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04"]),
+    "is_active": [True, False, True, True],
+    "score": [85.5, 92.0, 78.3, 96.7]
+})
+
+# Create table with automatic type mapping
+table = Table.from_df(
+    df,
+    database="analytics", 
+    name="users",
+    cluster=cluster,
+    mode="overwrite",  # or "append"
+    engine="MergeTree",
+    order_by=["user_id"],
+    partition_by=["toYYYYMM(created_at)"]
+)
+```
+
+### Loading Tables to DataFrames
+
+```python
+# Load entire table
+df = table.to_df()
+
+# Or use cluster for custom queries
+df = cluster.client.query_df("SELECT * FROM analytics.users WHERE score > 80")
+```
+
+### Type Mapping
+
+The library automatically maps pandas dtypes to appropriate ClickHouse types:
+
+| Pandas Type | ClickHouse Type |
+|-------------|-----------------|
+| `bool` | `UInt8` |
+| `int8/16/32/64` | `Int8/16/32/64` |
+| `uint8/16/32/64` | `UInt8/16/32/64` |
+| `float32/64` | `Float32/64` |
+| `datetime64` | `DateTime64(3)` |
+| `category` | `String` |
+| `object` | `String` |
+
+### Advanced Usage
+
+```python
+from cht.dataframe import create_table_from_dataframe, insert_dataframe
+
+# Direct functions for more control
+create_table_from_dataframe(
+    cluster=cluster,
+    df=df,
+    table_name="custom_table",
+    database="temp",
+    engine="ReplacingMergeTree",
+    order_by=["id", "timestamp"],
+    column_types={"email": "LowCardinality(String)"}  # Override types
+)
+
+# Insert additional data
+insert_dataframe(cluster=cluster, df=new_data, table_name="custom_table", database="temp")
 ```
 
 ## Development
