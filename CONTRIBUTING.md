@@ -317,30 +317,289 @@ docs: update README with DataFrame examples
 test: add integration tests for Docker setup
 ```
 
-## Release Process
+## Release Process & Deployment
 
-1. **Version Bumping**
-   ```bash
-   # Update version in pyproject.toml
-   # Update __init__.py with new version
-   ```
+### **Pre-Release Checklist**
 
-2. **Create Release Branch**
-   ```bash
-   git checkout -b release/v0.2.0
-   ```
+Before creating any release, ensure all quality checks pass:
 
-3. **Update Documentation**
-   ```bash
-   # Update README.md
-   # Update CHANGELOG.md
-   ```
+```bash
+# 1. Run complete test suite
+pytest -v
 
-4. **Tag Release**
-   ```bash
-   git tag -a v0.2.0 -m "Release version 0.2.0"
-   git push origin v0.2.0
-   ```
+# 2. Run all code quality checks
+black --check src/ tests/
+isort --check-only src/ tests/
+flake8 src/ tests/ --max-line-length=100 --extend-ignore=E203,W503
+pylint src/cht/
+
+# 3. Build package locally to verify
+python -m build --wheel
+```
+
+### **Version Management**
+
+#### **1. Update Version Numbers**
+
+The version must be updated in **both** files to ensure consistency:
+
+```bash
+# Update pyproject.toml
+vim pyproject.toml
+# Change: version = "0.4.0" → version = "0.4.1"
+
+# Update src/cht/__init__.py
+vim src/cht/__init__.py
+# Change: __version__ = "0.4.0" → __version__ = "0.4.1"
+```
+
+⚠️ **Critical**: Both files must have the same version number. Mismatched versions will cause pip installations to report incorrect versions.
+
+#### **2. Verify Version Consistency**
+
+```bash
+# Check that both sources report the same version
+python -c "
+import toml
+with open('pyproject.toml') as f:
+    pyproject_version = toml.load(f)['project']['version']
+
+from src.cht import __version__ as code_version
+
+print(f'pyproject.toml: {pyproject_version}')
+print(f'__init__.py: {code_version}')
+print(f'Match: {pyproject_version == code_version}')
+"
+```
+
+### **Release Workflow**
+
+#### **Step 1: Prepare Release Commit**
+
+```bash
+# 1. Create feature branch (optional for direct main pushes)
+git checkout -b release/v0.4.1
+
+# 2. Update versions (see above)
+# 3. Update documentation if needed
+
+# 4. Commit version changes
+git add pyproject.toml src/cht/__init__.py
+git commit -m "bump: Update version to 0.4.1"
+
+# 5. Push to main (or merge PR)
+git checkout main
+git merge release/v0.4.1  # or push branch and create PR
+git push origin main
+```
+
+#### **Step 2: Create and Push Git Tag**
+
+```bash
+# 1. Create annotated tag
+git tag -a v0.4.1 -m "Release version 0.4.1
+
+Features:
+- Add Table.from_query() method for SQL-based table creation
+- Add limit parameter to Table.to_df() for memory efficiency
+- Improve code organization with shared utility methods"
+
+# 2. Push tag to trigger GitHub Actions
+git push origin v0.4.1
+```
+
+#### **Step 3: Monitor GitHub Actions**
+
+```bash
+# Check GitHub Actions status
+# Go to: https://github.com/kalinkinisaac/cht/actions
+
+# Or use GitHub CLI if installed:
+gh run list --limit 5
+```
+
+**Expected GitHub Actions Workflow:**
+1. **Linting & Testing**: Runs Black, flake8, isort, pylint, pytest
+2. **Build**: Creates wheel and source distributions
+3. **Release**: Creates GitHub release with artifacts
+
+### **Common Deployment Issues & Solutions**
+
+#### **Issue 1: GitHub Actions Failing on Linting**
+
+**Symptoms**: "11 successful and 2 failing checks" - typically flake8 and Black failures
+
+**Solution**:
+```bash
+# Fix all linting issues locally first
+black src/ tests/
+isort src/ tests/
+flake8 src/ tests/ --max-line-length=100 --extend-ignore=E203,W503
+
+# Common fixes needed:
+# - Line length > 100 chars
+# - Missing trailing commas in multiline structures
+# - Import ordering issues
+# - Boolean comparisons (use `bool(x) is True` for numpy booleans)
+
+# Commit fixes and re-tag
+git add -A
+git commit -m "fix: resolve linting issues for GitHub Actions"
+
+# Move tag to new commit
+git tag -d v0.4.1
+git tag v0.4.1
+git push origin :refs/tags/v0.4.1  # Delete remote tag
+git push origin v0.4.1             # Push new tag
+```
+
+#### **Issue 2: Pip Installation Shows Wrong Version**
+
+**Symptoms**: `pip install git+https://github.com/kalinkinisaac/cht.git` installs old version
+
+**Root Cause**: Version mismatch between `pyproject.toml` and `__init__.py`, or stale package metadata
+
+**Solution**:
+```bash
+# 1. Verify both version files are updated (see Version Management above)
+
+# 2. Test local build
+python -m build --wheel
+# Check output: "Successfully built cht-0.4.1-py3-none-any.whl"
+
+# 3. If versions are correct, force pip cache clear
+pip cache purge
+pip install git+https://github.com/kalinkinisaac/cht.git --force-reinstall
+
+# 4. Verify installation
+python -c "import cht; print(f'Installed version: {cht.__version__}')"
+```
+
+#### **Issue 3: Tests Pass Locally but Fail in CI**
+
+**Common Causes**:
+- Different Python versions
+- Missing environment variables
+- Network-dependent tests
+- Platform-specific code
+
+**Solution**:
+```bash
+# Run tests in clean environment (like CI)
+python -m venv clean_test_env
+source clean_test_env/bin/activate
+pip install -e .
+pytest
+
+# Check Python version compatibility
+python --version  # Should match CI (3.10+)
+
+# Review failed test logs in GitHub Actions
+```
+
+### **Deployment Verification**
+
+#### **After Successful Deployment**
+
+```bash
+# 1. Verify GitHub release was created
+# Visit: https://github.com/kalinkinisaac/cht/releases
+
+# 2. Test installation from GitHub
+pip install git+https://github.com/kalinkinisaac/cht.git --force-reinstall
+
+# 3. Verify version and functionality
+python -c "
+import cht
+print(f'Version: {cht.__version__}')
+
+# Test new features work
+print('Testing new features...')
+print('- Table.from_df:', hasattr(cht.Table, 'from_df'))
+print('- Table.from_query:', hasattr(cht.Table, 'from_query'))
+
+# Test instance methods
+table = cht.Table('test')
+import inspect
+to_df_params = inspect.signature(table.to_df).parameters
+print('- Table.to_df limit param:', 'limit' in to_df_params)
+print('✓ All features available')
+"
+
+# 4. Run integration test
+python example_complete_workflow.py  # Should work with new version
+```
+
+### **Hotfix Deployment**
+
+For critical bugs that need immediate release:
+
+```bash
+# 1. Create hotfix branch from latest release tag
+git checkout v0.4.1
+git checkout -b hotfix/v0.4.2
+
+# 2. Make minimal fix
+# 3. Update version to patch level (0.4.1 → 0.4.2)
+# 4. Follow normal release process with expedited testing
+
+# 5. Merge hotfix back to main
+git checkout main
+git merge hotfix/v0.4.2
+```
+
+### **Release Notes Template**
+
+When creating GitHub releases, use this template:
+
+```markdown
+## 🚀 CHT v0.4.1
+
+### ✨ New Features
+- **Table.from_query()**: Create ClickHouse tables directly from SQL queries
+- **Table.to_df(limit=N)**: Memory-efficient DataFrame loading with row limits
+
+### 🔧 Improvements
+- Refactored common logic to eliminate code duplication
+- Enhanced TTL management for temporary tables
+- Improved error handling and logging
+
+### 🐛 Bug Fixes
+- Fixed boolean comparison issues in test suite
+- Resolved linting violations for CI/CD compatibility
+
+### 📦 Installation
+```bash
+pip install git+https://github.com/kalinkinisaac/cht.git
+```
+
+### 🧪 Verification
+```python
+import cht
+print(f"CHT version: {cht.__version__}")  # Should show 0.4.1
+```
+
+**Full Changelog**: https://github.com/kalinkinisaac/cht/compare/v0.4.0...v0.4.1
+```
+
+### **Rollback Procedure**
+
+If a release needs to be rolled back:
+
+```bash
+# 1. Delete problematic tag
+git tag -d v0.4.1
+git push origin :refs/tags/v0.4.1
+
+# 2. Delete GitHub release (via web interface)
+
+# 3. Revert commits if needed
+git revert <commit-hash>
+
+# 4. Re-tag previous stable version as latest
+git tag v0.4.1 v0.4.0  # Point v0.4.1 to v0.4.0 commit
+git push origin v0.4.1
+```
 
 ## Getting Help
 
