@@ -161,6 +161,14 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Create stable filename copies
+        run: |
+          cd dist
+          # Create stable names for latest release
+          cp *.whl cht-latest-py3-none-any.whl || true
+          cp *.tar.gz cht-latest.tar.gz || true
+          ls -la
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
