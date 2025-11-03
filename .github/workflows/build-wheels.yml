@@ -95,53 +95,57 @@ jobs:
           name: wheels
           path: dist/*.whl
 
-  publish-test-pypi:
-    name: Publish to Test PyPI
-    needs: [build-sdist, build-wheels]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v'))
-    environment:
-      name: test-pypi
-      url: https://test.pypi.org/p/cht
-    permissions:
-      id-token: write
-
-    steps:
-      - name: Download all artifacts
+  # Disabled PyPI publishing - only GitHub releases
+  # publish-test-pypi:
+  #   name: Publish to Test PyPI
+  #   needs: [build-sdist, build-wheels]
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'push' && (github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v'))
+  #   environment:
+  #     name: test-pypi
+  #     url: https://test.pypi.org/p/cht
+  #   permissions:
+  #     id-token: write
+  #
+  #   steps:
+  #     - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
-          merge-multiple: true
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         path: dist
+  #         merge-multiple: true
+  #
+  #     - name: List artifacts
+  #       run: ls -la dist/
+  #
+  #     - name: Publish to Test PyPI
+  #       uses: pypa/gh-action-pypi-publish@release/v1
+  #       with:
+  #         repository-url: https://test.pypi.org/legacy/
+  #         skip-existing: true
 
-      - name: List artifacts
-        run: ls -la dist/
-
-      - name: Publish to Test PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          skip-existing: true
-
-  publish-pypi:
-    name: Publish to PyPI
-    needs: [build-sdist, build-wheels]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    environment:
-      name: pypi
-      url: https://pypi.org/p/cht
-    permissions:
-      id-token: write
-
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+  # publish-pypi:
+  #   name: Publish to PyPI
+  #   needs: [build-sdist, build-wheels]
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+  #   environment:
+  #     name: pypi
+  #     url: https://pypi.org/p/cht
+  #   permissions:
+  #     id-token: write
+  #
+  #   steps:
+  #     - name: Download all artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         path: dist
+  #         merge-multiple: true
+  #
+  #     - name: Publish to PyPI
+  #       uses: pypa/gh-action-pypi-publish@release/v1
 
   create-release:
     name: Create GitHub Release
