@@ -6,9 +6,9 @@ from time import strftime, time
 from typing import Any, Callable, Iterable, Optional, Sequence
 
 import clickhouse_connect
+import pandas as pd
 from clickhouse_connect.driver.client import Client
 from clickhouse_connect.driver.query import QueryResult
-import pandas as pd
 
 _logger = logging.getLogger("cht.cluster")
 
