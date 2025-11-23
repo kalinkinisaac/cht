@@ -3,12 +3,15 @@ from __future__ import annotations
 import logging
 import re
 from time import strftime, time
-from typing import Any, Callable, Iterable, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional, Sequence
 
 import clickhouse_connect
 import pandas as pd
 from clickhouse_connect.driver.client import Client
 from clickhouse_connect.driver.query import QueryResult
+
+if TYPE_CHECKING:
+    from .graph import DependencyGraph
 
 _logger = logging.getLogger("cht.cluster")
 
@@ -274,6 +277,35 @@ class Cluster:
         if result is None:
             return pd.DataFrame()
         return pd.DataFrame(result.result_rows, columns=result.column_names)
+
+    def get_dependency_graph(self) -> "DependencyGraph":
+        """
+        Create a dependency graph for this cluster.
+
+        Discovers all tables and materialized view dependencies across all databases
+        in the cluster and returns a structured graph representation.
+
+        Returns:
+            DependencyGraph instance with discovered tables and dependencies
+
+        Example:
+            >>> cluster = Cluster("prod", "clickhouse.company.com")
+            >>> graph = cluster.get_dependency_graph()
+            >>> print(f"Found {len(graph.nodes)} tables with {len(graph.edges)} dependencies")
+            >>>
+            >>> # Analyze specific table dependencies
+            >>> sources = graph.get_sources("analytics.user_events")
+            >>> targets = graph.get_targets("raw.events")
+            >>>
+            >>> # Export for visualization
+            >>> json_data = graph.to_json()
+            >>> dot_graph = graph.to_dot()
+        """
+        from .graph import DependencyGraph
+
+        graph = DependencyGraph(self)
+        graph.build()
+        return graph
 
     # ------------------------------ misc ---------------------------------
     def __repr__(self) -> str:  # pragma: no cover - trivial

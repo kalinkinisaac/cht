@@ -1,11 +1,48 @@
 #!/usr/bin/env python3
-"""
-Demo of the unified CHT API - both Table.from_df() and Table.from_query()
+"""CHT unified API demonstration - streamlined workflow examples.
+
+This example demonstrates the simplified CHT interface for common operations:
+- Default cluster configuration for workspace-wide usage
+- Seamless DataFrame ↔ ClickHouse integration
+- Temporary table management with TTL
+- Backup and restore workflows
+- High-level table operations
+
+The unified API reduces boilerplate and provides a pandas-like experience
+while maintaining full ClickHouse capabilities.
+
+Prerequisites:
+    - ClickHouse running via docker compose up -d
+    - CHT library installed
+    - Pandas for DataFrame operations
+
+Example:
+    $ docker compose up -d
+    $ python examples/basic_usage.py
+    
+    Output:
+    ✓ Connected with default cluster
+    ✓ Created temporary table from DataFrame
+    ✓ Performed backup and restore
+    ✓ Demonstrated unified API workflow
 """
 
-import pandas as pd
+import logging
 from datetime import timedelta
+from typing import Optional
+
+import pandas as pd
+
+from cht.cluster import Cluster
 from cht.table import Table
+
+
+def setup_logging() -> None:
+    """Configure logging for the example."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s"
+    )
 
 
 def demo_unified_api():

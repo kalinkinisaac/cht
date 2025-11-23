@@ -375,6 +375,98 @@ class Table:
             "estimated_rows_replayed": estimated_rows,
         }
 
+    # --------------------------- Graph methods ---------------------------
+    def get_dependent_views(self) -> List[Tuple[str, str]]:
+        """
+        Get materialized views that depend on this table.
+
+        This is an enhanced version of find_targeting_mvs() that provides
+        a cleaner interface for dependency graph construction.
+
+        Returns:
+            List of (database, view_name) tuples for dependent MVs
+        """
+        return self.find_targeting_mvs()
+
+    def get_source_tables(self) -> List[Tuple[str, str]]:
+        """
+        Get source tables that this table depends on.
+
+        This method analyzes the table's definition to find tables it reads from.
+        For regular tables, this returns an empty list. For materialized views,
+        this returns the source tables that feed into the view.
+
+        Returns:
+            List of (database, table_name) tuples for source tables
+        """
+        cluster = self._require_cluster()
+
+        # Check if this is a materialized view
+        engine_sql = f"""
+        SELECT engine 
+        FROM system.tables 
+        WHERE database = '{self.database}' AND name = '{self.name}'
+        """
+
+        engine_result = cluster.query(engine_sql)
+        if not engine_result or engine_result[0][0] != "MaterializedView":
+            return []  # Regular tables have no source dependencies
+
+        # For materialized views, find dependencies using system.dependencies
+        deps_sql = f"""
+        SELECT depends_on_database, depends_on_table
+        FROM system.dependencies  
+        WHERE database = '{self.database}' 
+          AND table = '{self.name}'
+          AND depends_on_database != ''
+          AND depends_on_table != ''
+        """
+
+        deps_result = cluster.query(deps_sql)
+        if not deps_result:
+            return []
+
+        # Filter out the target table (TO clause) to get only source tables
+        dependencies = [(row[0], row[1]) for row in deps_result]
+
+        # Determine which dependencies are sources vs targets
+        source_tables = []
+
+        try:
+            # Get the CREATE statement to parse TO clause
+            create_sql = f"""
+            SELECT create_table_query
+            FROM system.tables
+            WHERE database = '{self.database}' AND name = '{self.name}'
+            """
+
+            create_result = cluster.query(create_sql)
+            if create_result:
+                from .sql_utils import parse_to_table
+
+                create_query = create_result[0][0] if create_result[0] else ""
+                to_database, to_table = parse_to_table(create_query, default_db=self.database)
+
+                # Exclude the target table from dependencies
+                for dep_db, dep_table in dependencies:
+                    if not (dep_db == to_database and dep_table == to_table):
+                        source_tables.append((dep_db, dep_table))
+        except Exception:
+            # If parsing fails, return all dependencies
+            source_tables = dependencies
+
+        return source_tables
+
+    def get_dependency_info(self) -> Dict[str, List[Tuple[str, str]]]:
+        """
+        Get comprehensive dependency information for this table.
+
+        Returns:
+            Dictionary with 'sources' and 'targets' keys containing
+            lists of (database, table) tuples
+        """
+        return {"sources": self.get_source_tables(), "targets": self.get_dependent_views()}
+
     # --------------------------- quality helpers -------------------------
     def remote(self, *, port: int = 9000) -> str:
         cluster = self._require_cluster()
@@ -469,6 +561,7 @@ class Table:
             cluster.query(f"ALTER TABLE {table.fqdn} MODIFY COMMENT '{comment}'")
 
     @classmethod
+    @classmethod
     def from_df(
         cls,
         df: pd.DataFrame,
@@ -479,6 +572,7 @@ class Table:
         create_if_not_exists: bool = True,
         mode: str = "overwrite",
         ttl: Optional[timedelta] = timedelta(days=1),
+        auto_nullable: bool = True,
         **kwargs: Any,
     ) -> "Table":
         """
@@ -495,7 +589,8 @@ class Table:
             create_if_not_exists: Whether to create table if it doesn't exist
             mode: "overwrite" (drop/recreate) or "append" (insert into existing)
             ttl: Time to live for automatic cleanup (None = permanent, default: 1 day)
-            **kwargs: Additional arguments (engine, order_by, partition_by, etc.)
+            auto_nullable: Automatically detect nullable columns (default: True)
+            **kwargs: Additional arguments (engine, order_by, partition_by, column_types, etc.)
 
         Returns:
             Table instance pointing to the created table with TTL management
@@ -523,6 +618,20 @@ class Table:
             ...     ttl=None  # Never expires
             ... )
 
+            >>> # DataFrame with nullable datetime columns (auto-detected)
+            >>> df_with_nulls = pd.DataFrame({
+            ...     "start_date": pd.to_datetime(["2023-01-01", "2023-01-02"]),
+            ...     "end_date": pd.to_datetime(["2023-01-10", None])  # NaT will be nullable
+            ... })
+            >>> table = Table.from_df(df_with_nulls, cluster)  # auto_nullable=True
+
+            >>> # Manual column type control
+            >>> table = Table.from_df(
+            ...     df_with_nulls, cluster,
+            ...     column_types={"end_date": "Nullable(DateTime64(3))"},
+            ...     auto_nullable=False  # Disable auto-detection
+            ... )
+
             >>> # Using default cluster (set once, use everywhere)
             >>> Table.set_default_cluster(cluster)
             >>> table = Table.from_df(df)  # No cluster needed!
@@ -534,6 +643,9 @@ class Table:
             cluster=cluster, database=database, name=name, ttl=ttl
         )
 
+        # Extract specific parameters that need special handling
+        column_types = kwargs.pop("column_types", None)
+
         if mode == "overwrite":
             # Drop table if it exists
             if table.exists():
@@ -546,9 +658,18 @@ class Table:
                 table_name=name,
                 database=database,
                 if_not_exists=False,
+                column_types=column_types,
+                auto_nullable=auto_nullable,
                 **kwargs,
             )
-            insert_dataframe(cluster=cluster, df=df, table_name=name, database=database)
+            insert_dataframe(
+                cluster=cluster,
+                df=df,
+                table_name=name,
+                database=database,
+                column_types=column_types,
+                auto_nullable=auto_nullable,
+            )
 
         elif mode == "append":
             # Create table if needed
@@ -559,84 +680,26 @@ class Table:
                     table_name=name,
                     database=database,
                     if_not_exists=True,
+                    column_types=column_types,
+                    auto_nullable=auto_nullable,
                     **kwargs,
                 )
 
             # Insert data
-            insert_dataframe(cluster=cluster, df=df, table_name=name, database=database)
+            insert_dataframe(
+                cluster=cluster,
+                df=df,
+                table_name=name,
+                database=database,
+                column_types=column_types,
+                auto_nullable=auto_nullable,
+            )
 
         else:
             raise ValueError(f"mode must be 'overwrite' or 'append', got: {mode}")
 
         # Add TTL comment using common logic
         cls._add_ttl_comment(cluster, table, ttl)
-
-        return table
-        from .dataframe import (
-            create_table_from_dataframe,
-            generate_temp_table_name,
-            insert_dataframe,
-        )
-        from .temp_tables import format_expires_at
-
-        # Use provided cluster or fall back to default
-        if cluster is None:
-            if cls._default_cluster is None:
-                raise RuntimeError(
-                    "Table.from_df() requires a cluster. Either pass cluster=... "
-                    "or use Table.set_default_cluster() to set a global default."
-                )
-            cluster = cls._default_cluster
-
-        if name is None:
-            name = generate_temp_table_name()
-
-        # Ensure name is not None for type safety
-        assert name is not None, "Table name must be provided or generated"
-
-        table = cls(name=name, database=database, cluster=cluster)
-
-        if mode == "overwrite":
-            # Drop table if it exists
-            if table.exists():
-                cluster.query(f"DROP TABLE {table.fqdn}")
-
-            # Create and populate table
-            create_table_from_dataframe(
-                cluster=cluster,
-                df=df,
-                table_name=name,
-                database=database,
-                if_not_exists=False,
-                **kwargs,
-            )
-            insert_dataframe(cluster=cluster, df=df, table_name=name, database=database)
-
-        elif mode == "append":
-            # Create table if needed
-            if create_if_not_exists and not table.exists():
-                create_table_from_dataframe(
-                    cluster=cluster,
-                    df=df,
-                    table_name=name,
-                    database=database,
-                    if_not_exists=True,
-                    **kwargs,
-                )
-
-            # Insert data
-            insert_dataframe(cluster=cluster, df=df, table_name=name, database=database)
-
-        else:
-            raise ValueError(f"mode must be 'overwrite' or 'append', got: {mode}")
-
-        # Add TTL comment if specified
-        if ttl is not None:
-            from datetime import datetime, timezone
-
-            expires_at = datetime.now(timezone.utc) + ttl
-            comment = format_expires_at(expires_at)
-            cluster.query(f"ALTER TABLE {table.fqdn} MODIFY COMMENT '{comment}'")
 
         return table
 

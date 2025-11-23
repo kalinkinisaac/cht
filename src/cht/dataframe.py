@@ -53,16 +53,69 @@ def pandas_dtype_to_clickhouse(dtype: Any) -> str:
     return "String"
 
 
+def detect_nullable_columns(df: pd.DataFrame) -> dict[str, str]:
+    """
+    Auto-detect columns that should be nullable in ClickHouse.
+
+    This function identifies columns that contain null/NaN/NaT values and
+    returns appropriate nullable ClickHouse types for them.
+
+    Args:
+        df: DataFrame to analyze
+
+    Returns:
+        Dictionary mapping column names to nullable ClickHouse types
+
+    Example:
+        >>> df = pd.DataFrame({
+        ...     'id': [1, 2, 3],
+        ...     'name': ['A', None, 'C'],  # Has None
+        ...     'date': pd.to_datetime(['2023-01-01', None, '2023-01-03'])  # Has NaT
+        ... })
+        >>> detect_nullable_columns(df)
+        {'name': 'Nullable(String)', 'date': 'Nullable(DateTime64(3))'}
+    """
+    nullable_overrides = {}
+
+    for column in df.columns:
+        if df[column].isna().any():
+            base_type = pandas_dtype_to_clickhouse(df[column].dtype)
+            nullable_overrides[column] = f"Nullable({base_type})"
+
+    return nullable_overrides
+
+
 def resolve_column_types(
     df: pd.DataFrame,
     column_types: Optional[Mapping[str, str]] = None,
+    auto_nullable: bool = False,
 ) -> list[tuple[str, str]]:
-    """Resolve column types for a DataFrame, applying overrides where specified."""
+    """
+    Resolve column types for a DataFrame, applying overrides where specified.
+
+    Args:
+        df: DataFrame to analyze
+        column_types: Manual column type overrides
+        auto_nullable: Automatically detect and apply nullable types for columns with nulls
+
+    Returns:
+        List of (column_name, clickhouse_type) tuples
+    """
     resolved: list[tuple[str, str]] = []
-    overrides = column_types or {}
+    overrides = dict(column_types or {})
+
+    # Apply auto-nullable detection if requested
+    if auto_nullable:
+        auto_detected = detect_nullable_columns(df)
+        # Only add auto-detected types if not manually overridden
+        for col, nullable_type in auto_detected.items():
+            if col not in overrides:
+                overrides[col] = nullable_type
+
     for column in df.columns:
         resolved_type = overrides.get(column, pandas_dtype_to_clickhouse(df[column].dtype))
         resolved.append((column, resolved_type))
+
     return resolved
 
 
@@ -78,14 +131,33 @@ def build_create_table_sql(
     settings: Optional[Mapping[str, Any]] = None,
     if_not_exists: bool = True,
     column_types: Optional[Mapping[str, str]] = None,
+    auto_nullable: bool = False,
 ) -> str:
-    """Build a CREATE TABLE statement for ClickHouse based on a pandas DataFrame schema."""
+    """
+    Build a CREATE TABLE statement for ClickHouse based on a pandas DataFrame schema.
+
+    Args:
+        df: DataFrame to create table for
+        table_name: Name of the table to create
+        database: Database name
+        engine: ClickHouse table engine
+        order_by: ORDER BY clause columns
+        partition_by: PARTITION BY clause columns
+        primary_key: PRIMARY KEY clause columns
+        settings: Table settings
+        if_not_exists: Whether to use IF NOT EXISTS
+        column_types: Manual column type overrides
+        auto_nullable: Automatically detect nullable columns
+
+    Returns:
+        CREATE TABLE SQL statement
+    """
     if df.empty:
         raise ValueError("DataFrame is empty; cannot infer schema.")
     if not table_name:
         raise ValueError("table_name must be provided.")
 
-    resolved_types = resolve_column_types(df, column_types)
+    resolved_types = resolve_column_types(df, column_types, auto_nullable=auto_nullable)
 
     def _format_identifier(name: str) -> str:
         """Format a single identifier with backticks."""
@@ -140,8 +212,28 @@ def create_table_from_dataframe(
     settings: Optional[Mapping[str, Any]] = None,
     if_not_exists: bool = True,
     column_types: Optional[Mapping[str, str]] = None,
+    auto_nullable: bool = False,
 ) -> str:
-    """Create a ClickHouse table based on the schema of the provided DataFrame."""
+    """
+    Create a ClickHouse table based on the schema of the provided DataFrame.
+
+    Args:
+        cluster: ClickHouse cluster connection
+        df: DataFrame to create table for
+        table_name: Name of the table to create
+        database: Database name
+        engine: ClickHouse table engine
+        order_by: ORDER BY clause columns
+        partition_by: PARTITION BY clause columns
+        primary_key: PRIMARY KEY clause columns
+        settings: Table settings
+        if_not_exists: Whether to use IF NOT EXISTS
+        column_types: Manual column type overrides
+        auto_nullable: Automatically detect nullable columns
+
+    Returns:
+        CREATE TABLE SQL statement that was executed
+    """
     create_sql = build_create_table_sql(
         df,
         table_name,
@@ -153,6 +245,7 @@ def create_table_from_dataframe(
         settings=settings,
         if_not_exists=if_not_exists,
         column_types=column_types,
+        auto_nullable=auto_nullable,
     )
     cluster.query(create_sql)
     return create_sql
@@ -165,13 +258,24 @@ def insert_dataframe(
     database: str = "default",
     *,
     column_types: Optional[Mapping[str, str]] = None,
+    auto_nullable: bool = False,
 ) -> None:
-    """Insert a pandas DataFrame into an existing ClickHouse table."""
+    """
+    Insert a pandas DataFrame into an existing ClickHouse table.
+
+    Args:
+        cluster: ClickHouse cluster connection
+        df: DataFrame to insert
+        table_name: Name of target table
+        database: Database name
+        column_types: Manual column type overrides
+        auto_nullable: Automatically detect nullable columns (used for data processing)
+    """
     if df.empty:
         return
 
     df_to_insert = df.copy()
-    resolved_types = resolve_column_types(df_to_insert, column_types)
+    resolved_types = resolve_column_types(df_to_insert, column_types, auto_nullable=auto_nullable)
 
     # Handle string columns - fill NaN with empty strings
     for column, ch_type in resolved_types:

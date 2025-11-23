@@ -2,10 +2,12 @@ from .cluster import Cluster, is_mutating
 from .dataframe import (
     build_create_table_sql,
     create_table_from_dataframe,
+    detect_nullable_columns,
     insert_dataframe,
     pandas_dtype_to_clickhouse,
     resolve_column_types,
 )
+from .graph import DependencyGraph, GraphEdge, GraphNode
 from .kafka import (
     batch_update_consumer_groups,
     compare_kafka_tables_inline,
@@ -34,15 +36,20 @@ from .sql_utils import (
 )
 from .table import Table
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 
 __all__ = [
     "Cluster",
     "Table",
     "is_mutating",
+    # Graph utilities
+    "DependencyGraph",
+    "GraphNode",
+    "GraphEdge",
     # DataFrame utilities
     "build_create_table_sql",
     "create_table_from_dataframe",
+    "detect_nullable_columns",
     "insert_dataframe",
     "pandas_dtype_to_clickhouse",
     "resolve_column_types",

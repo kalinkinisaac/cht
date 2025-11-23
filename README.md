@@ -16,6 +16,49 @@ pip install https://github.com/kalinkinisaac/cht/releases/latest/download/cht-0.
 pip install https://github.com/kalinkinisaac/cht/releases/download/v0.2.0/cht-0.2.0-py3-none-any.whl
 ```
 
+### Single-File Distribution (No pip needed!)
+
+Just download one file and run - no installation required! Inspired by [copyparty](https://github.com/9001/copyparty).
+
+#### Self-Extracting File (Recommended)
+```bash
+# Download the self-extracting file (includes all dependencies)
+curl -O https://github.com/kalinkinisaac/cht/releases/latest/download/cht-sfx.py
+
+# Run directly - extracts automatically on first use
+python cht-sfx.py --version
+python cht-sfx.py  # Interactive mode
+
+# Import CHT in your scripts
+python -c "exec(open('cht-sfx.py').read()); from cht import Cluster; print('CHT loaded!')"
+```
+
+**Features:**
+- ✅ No dependencies to install - everything bundled
+- ✅ Works with any Python 3.10+ installation
+- ✅ Auto-extracts to ~/.cache/cht-sfx on first run
+- ✅ ~27MB download (includes pandas, clickhouse-connect)
+- ✅ Same functionality as pip-installed CHT
+
+#### Zipapp Distribution (Lightweight)
+```bash
+# Download the lightweight zipapp (requires pre-installed dependencies)
+curl -O https://github.com/kalinkinisaac/cht/releases/latest/download/cht.pyz
+
+# Install dependencies first
+pip install clickhouse-connect>=0.6.8 pandas>=1.5
+
+# Run zipapp
+python cht.pyz --version
+python -c "import sys; sys.path.insert(0, 'cht.pyz'); from cht import Cluster"
+```
+
+**Features:**
+- ✅ Only ~250KB download
+- ⚠️ Requires dependencies pre-installed  
+- ✅ Standard Python zipapp format
+- ✅ Good for environments with existing pandas/clickhouse-connect
+
 ### Install from Source
 ```bash
 # Install from git repository (latest)
@@ -35,6 +78,7 @@ print("cht version:", cht.__version__)
 - `Cluster` wrapper with structured logging, bulk execution helper, and disk usage introspection.
 - `Table` convenience API for backups, restore flows, MV replay, and metadata inspection.
 - **DataFrame integration** for seamless pandas ↔ ClickHouse workflows with automatic type mapping.
+- **Dependency Graph Mapping** for visualizing table and materialized view relationships across databases.
 - High‑level operations (`rebuild_table_via_mv`, duplicate analysis, row sync utilities).
 - Kafka tooling for consumer group rotation and CREATE TABLE diffing.
 - Lightweight SQL helpers (identifier formatting, `remote()` builder, hash comparison scaffolding).
@@ -96,6 +140,35 @@ result_df = table.to_df()
 print(result_df)
 ```
 
+## Dependency Graph Analysis
+
+Discover and visualize table relationships across your ClickHouse cluster:
+
+```python
+from cht import Cluster
+
+# Connect and analyze dependencies
+cluster = Cluster("prod", host="localhost", user="developer", password="developer")
+graph = cluster.get_dependency_graph()
+
+# Basic analysis
+print(f"Found {len(graph.nodes)} tables and {len(graph.edges)} dependencies")
+
+# Detect circular dependencies
+cycles = graph.find_cycles()
+if cycles:
+    print(f"⚠️ Found {len(cycles)} circular dependencies")
+
+# Find most influential tables
+influential = graph.get_most_influential_tables(limit=5)
+for table, score in influential:
+    print(f"Critical table: {table.fqdn} (score: {score:.2f})")
+
+# Export for visualization
+graph.to_graphml("pipeline.graphml")  # For Gephi
+graph.visualize("network.png")        # Generate diagram
+```
+
 ## DataFrame Integration
 
 The library provides seamless integration between pandas DataFrames and ClickHouse tables with automatic type mapping and table creation.
@@ -143,7 +216,7 @@ print(df)
 The library automatically maps pandas dtypes to appropriate ClickHouse types:
 
 | Pandas Type | ClickHouse Type |
-|-------------|-----------------|
+|-------------|-----------------|  
 | `bool` | `UInt8` |
 | `int8/16/32/64` | `Int8/16/32/64` |
 | `uint8/16/32/64` | `UInt8/16/32/64` |
@@ -152,7 +225,53 @@ The library automatically maps pandas dtypes to appropriate ClickHouse types:
 | `category` | `String` |
 | `object` | `String` |
 
-### Mode Options
+### 🆕 Automatic Nullable Column Detection
+
+CHT v0.4.3+ automatically detects columns with missing values (NaN/NaT/None) and creates them as nullable in ClickHouse:
+
+```python
+# DataFrame with missing datetime values - this now works automatically!
+df_with_nulls = pd.DataFrame({
+    "bidder_id": [1, 2, 3],
+    "start_date": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-03"]),
+    "end_date": pd.to_datetime(["2023-01-10", None, "2023-01-12"])  # NaT value
+})
+
+# ✅ This works automatically with auto_nullable=True (default)
+table = Table.from_df(df_with_nulls, cluster=cluster, name="bidders")
+
+# Generated ClickHouse schema:
+# - bidder_id: Int64
+# - start_date: DateTime64(3)
+# - end_date: Nullable(DateTime64(3))  ← Automatically detected as nullable
+```
+
+**Manual Control Options:**
+
+```python
+# Disable auto-detection and specify manually
+table = Table.from_df(
+    df_with_nulls,
+    cluster=cluster,
+    column_types={"end_date": "Nullable(DateTime64(3))"},
+    auto_nullable=False  # Disable auto-detection
+)
+
+# Check what would be auto-detected
+from cht.dataframe import detect_nullable_columns
+nullable_cols = detect_nullable_columns(df_with_nulls)
+print(nullable_cols)  # {'end_date': 'Nullable(DateTime64(3))'}
+```
+
+**Automatic Nullable Types:**
+
+| Column with Nulls | Nullable ClickHouse Type |
+|-------------------|---------------------------|
+| `int64` + NaN | `Nullable(Int64)` |
+| `float64` + NaN | `Nullable(Float64)` |
+| `datetime64` + NaT | `Nullable(DateTime64(3))` |
+| `object/string` + None | `Nullable(String)` |
+| `bool` + None | `Nullable(UInt8)` |### Mode Options
 
 ```python
 # Overwrite mode (default) - drops and recreates table
@@ -169,13 +288,21 @@ table = Table.from_df(df, cluster=cluster, mode="append")
 pytest                    # Run all tests
 pytest -v                # Verbose output
 pytest tests/test_*.py   # Run specific test files
+pytest tests/test_graph.py  # Run dependency graph tests
 ```
+
+### Examples
+See the `examples/` directory for comprehensive usage demonstrations:
+- `examples/basic_usage.py` - Core CHT functionality
+- `examples/dependency_graph_basic.py` - Live dependency analysis
+- `examples/dependency_graph_mock.py` - Mock data demonstration  
+- `examples/advanced_operations.py` - Production patterns
 
 ### Code Quality
 ```bash
-black src tests          # Format code
-isort src tests          # Sort imports
-flake8 src tests         # Lint code
+black src tests examples  # Format code
+isort src tests examples  # Sort imports
+flake8 src tests examples # Lint code
 ```
 
 ### Building Wheels
@@ -198,11 +325,22 @@ docker compose down
 
 ## Project Layout
 ```
-src/cht/            # Package modules
-tests/              # Pytest-based unit tests
-docker-compose.yml  # Local ClickHouse stack
-docker/init/        # Optional bootstrap SQL scripts
+src/cht/                # Package modules
+tests/                  # Pytest-based unit tests
+examples/               # Usage examples and demonstrations
+docker-compose.yml      # Local ClickHouse stack
+docker/init/            # Optional bootstrap SQL scripts
+CHANGELOG.md            # Version history and release notes
+PROJECT_STRUCTURE.md    # Development guidelines and best practices
 ```
+
+## Documentation
+
+- [Examples Guide](examples/README.md) - Comprehensive usage examples
+- [Dependency Graph Mapping](GRAPH_MAPPING.md) - Graph analysis features
+- [Project Structure](PROJECT_STRUCTURE.md) - Development guidelines
+- [Contributing Guide](CONTRIBUTING.md) - Contribution workflow
+- [Changelog](CHANGELOG.md) - Version history
 
 ## Next Steps
 - Point the Docker stack at staging data and exercise the high-level helpers.
