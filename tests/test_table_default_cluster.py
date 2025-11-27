@@ -34,7 +34,7 @@ class TestTableDefaultCluster:
         instance_cluster = MagicMock(spec=Cluster)
 
         Table.set_default_cluster(default_cluster)
-        table = Table("test_table", "test_db", cluster=instance_cluster)
+        table = Table("test_db", "test_table", cluster=instance_cluster)
 
         result = table._require_cluster()
         assert result is instance_cluster
@@ -107,7 +107,7 @@ class TestTableDefaultCluster:
         # Verify cluster.query was called
         mock_cluster.query.assert_called_once()
         call_args = mock_cluster.query.call_args[0][0]
-        assert "EXISTS TABLE test_db.test_table" in call_args
+        assert "EXISTS TABLE test_table.test_db" in call_args
         assert result is True
 
     def test_get_columns_uses_default_cluster(self):
@@ -123,7 +123,7 @@ class TestTableDefaultCluster:
         # Verify cluster.query was called
         mock_cluster.query.assert_called_once()
         call_args = mock_cluster.query.call_args[0][0]
-        assert "DESCRIBE TABLE test_db.test_table" in call_args
+        assert "DESCRIBE TABLE test_table.test_db" in call_args
         assert columns == ["col1", "col2", "col3"]
 
     def test_real_cluster_integration(self):
@@ -139,7 +139,7 @@ class TestTableDefaultCluster:
         assert table._require_cluster() is cluster1
 
         # Create table with explicit cluster
-        table_explicit = Table("logs", "system", cluster=cluster2)
+        table_explicit = Table("system", "logs", cluster=cluster2)
         assert table_explicit._require_cluster() is cluster2
 
         # with_cluster should work

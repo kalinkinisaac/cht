@@ -1,0 +1,36 @@
+🚀 CHT v0.4.4 - FINAL Modifier Support
+
+✨ New Features:
+- Added 'final' parameter to Table.to_df() method
+- Support for FINAL modifier in SELECT queries for deduplicated data
+- Useful for ReplacingMergeTree, SummingMergeTree, and other engines
+
+🔧 Usage Examples:
+```python
+# Load entire table as DataFrame
+df = table.to_df()
+
+# Load with row limit
+df_sample = table.to_df(limit=1000)
+
+# Load with FINAL modifier for deduplicated data
+df_final = table.to_df(final=True)
+
+# Combine limit and FINAL
+df_final_sample = table.to_df(limit=1000, final=True)
+```
+
+📋 Quality Assurance:
+- ✅ All 122 tests passing
+- ✅ Package builds successfully (cht-0.4.4-py3-none-any.whl)
+- ✅ Version consistency verified
+- ✅ Updated documentation
+
+📦 Installation:
+pip install git+https://github.com/kalinkinisaac/cht.git
+
+🧪 Verification:
+python -c "import cht; print(f'CHT version: {cht.__version__}')"
+
+This release adds essential functionality for reading deduplicated data
+from ClickHouse tables that use engines supporting FINAL modifier.

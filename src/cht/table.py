@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -13,7 +12,6 @@ from .sql_utils import format_identifier, remote_expression, rows_to_list
 _logger = logging.getLogger("cht.table")
 
 
-@dataclass
 class Table:
     """
     Convenience wrapper bound to a target table on a :class:`Cluster`.
@@ -28,16 +26,75 @@ class Table:
     The Table class supports a default cluster mechanism to avoid specifying
     cluster in every operation. Use Table.set_default_cluster() to set a
     global default, or pass cluster explicitly to override.
-    """
 
-    name: str
-    database: str = "default"
-    cluster: Optional[Cluster] = None
+    The constructor supports multiple flexible syntaxes:
+
+    Examples:
+        >>> # Simple table name (uses 'default' database)
+        >>> table = Table('users')
+
+        >>> # Database.table syntax
+        >>> table = Table('analytics.events')
+
+        >>> # Explicit parameters (database first, then table)
+        >>> table = Table('events', 'analytics')  # database='events', table='analytics'
+        >>> table = Table(database_or_fqdn='events', table_name='analytics')
+
+        >>> # With cluster
+        >>> table = Table('analytics.events', cluster=cluster)
+    """
 
     # Class-level default cluster
     _default_cluster: Optional[Cluster] = None
 
-    def __post_init__(self) -> None:
+    def __init__(
+        self,
+        database_or_fqdn: Optional[str] = None,
+        table_name: Optional[str] = None,
+        cluster: Optional[Cluster] = None,
+    ):
+        """
+        Initialize a Table instance with flexible constructor syntax.
+
+        Args:
+            database_or_fqdn: Database name OR 'database.table' format OR table name (when table_name is None)
+            table_name: Table name (optional if database_or_fqdn includes table)
+            cluster: ClickHouse cluster instance
+
+        Examples:
+            >>> Table('users')                    # database_or_fqdn='users', table_name=None 
+            >>>                                     # → database='default', name='users'
+            >>> Table('analytics.events')         # database_or_fqdn='analytics.events' 
+            >>>                                     # → database='analytics', name='events'
+            >>> Table('events', 'analytics')      # database_or_fqdn='events', table_name='analytics' 
+            >>>                                     # → database='events', name='analytics'
+            >>> Table(database_or_fqdn='events', table_name='analytics')  # explicit keyword args
+        """
+        if database_or_fqdn is None:
+            raise ValueError("Database or table specification is required")
+
+        # Case 1: Two parameters provided - first is database, second is table
+        if table_name is not None:
+            self.database = database_or_fqdn
+            self.name = table_name
+        # Case 2: One parameter with dot notation - parse as database.table
+        elif "." in database_or_fqdn:
+            parts = database_or_fqdn.split(".", 1)
+            if len(parts) == 2:
+                parsed_database, parsed_name = parts
+                self.database = parsed_database
+                self.name = parsed_name
+            else:
+                self.database = "default"
+                self.name = database_or_fqdn
+        # Case 3: Single parameter without dot - treat as table name with default database
+        else:
+            self.database = "default"
+            self.name = database_or_fqdn
+
+        self.cluster = cluster
+
+        # Initialize logging if needed
         if not _logger.handlers:
             logging.basicConfig(
                 level=logging.INFO,
@@ -48,6 +105,10 @@ class Table:
         """Return the fully qualified table name (database.table)."""
         return self.fqdn
 
+    def __repr__(self) -> str:
+        """Return a detailed representation of the Table instance."""
+        return f"Table(name='{self.name}', database='{self.database}', cluster={self.cluster})"
+
     # ----------------------------- properties -----------------------------
     @property
     def fqdn(self) -> str:
@@ -55,7 +116,7 @@ class Table:
 
     def with_cluster(self, cluster: Cluster) -> "Table":
         """Return a copy of this Table bound to a different cluster."""
-        return Table(name=self.name, database=self.database, cluster=cluster)
+        return Table(self.database, self.name, cluster=cluster)
 
     # ----------------------------- internals ------------------------------
     def _require_cluster(self) -> Cluster:
@@ -497,7 +558,7 @@ class Table:
             >>> df_sample = table.to_df(limit=1000)  # First 1000 rows
         """
         cluster = self._require_cluster()
-        
+
         final_modifier = ""
 
         if final:
@@ -542,7 +603,7 @@ class Table:
             name = generate_temp_table_name()
 
         # Create the table instance
-        table = cls(name, database=database, cluster=cluster)
+        table = Table(database, name, cluster=cluster)
 
         return cluster, name, table
 

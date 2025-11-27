@@ -43,7 +43,7 @@ class TestDependencyGraphBasics:
     def test_graph_node_creation(self):
         """Test GraphNode creation from Table instances."""
         cluster = self.make_cluster_with_responses([])
-        table = Table("users", "analytics", cluster)
+        table = Table("analytics", "users", cluster)
         node = GraphNode(table)
 
         assert node.table == table
@@ -55,9 +55,9 @@ class TestDependencyGraphBasics:
         """Test GraphEdge creation for materialized view dependencies."""
         cluster = self.make_cluster_with_responses([])
 
-        source_table = Table("events", "raw", cluster)
-        target_table = Table("events_agg", "analytics", cluster)
-        mv_table = Table("mv_events_agg", "analytics", cluster)
+        source_table = Table("raw", "events", cluster)
+        target_table = Table("analytics", "events_agg", cluster)
+        mv_table = Table("analytics", "mv_events_agg", cluster)
 
         edge = GraphEdge(
             source=GraphNode(source_table),
@@ -255,12 +255,12 @@ class TestGraphAnalysis:
         graph = DependencyGraph(cluster)
 
         # Create nodes
-        raw_events = GraphNode(Table("events", "raw", cluster))
-        raw_users = GraphNode(Table("users", "raw", cluster))
-        analytics_agg = GraphNode(Table("events_agg", "analytics", cluster))
-        analytics_stats = GraphNode(Table("user_stats", "analytics", cluster))
-        mv_agg = GraphNode(Table("mv_events_agg", "analytics", cluster))
-        mv_stats = GraphNode(Table("mv_user_stats", "analytics", cluster))
+        raw_events = GraphNode(Table("raw", "events", cluster))
+        raw_users = GraphNode(Table("raw", "users", cluster))
+        analytics_agg = GraphNode(Table("analytics", "events_agg", cluster))
+        analytics_stats = GraphNode(Table("analytics", "user_stats", cluster))
+        mv_agg = GraphNode(Table("analytics", "mv_events_agg", cluster))
+        mv_stats = GraphNode(Table("analytics", "mv_user_stats", cluster))
 
         # Add nodes to graph
         for node in [raw_events, raw_users, analytics_agg, analytics_stats, mv_agg, mv_stats]:
@@ -336,12 +336,12 @@ class TestGraphAnalysis:
 
         # Add a cycle artificially
         cluster = graph.cluster
-        cycle_node = GraphNode(Table("cycle_table", "test", cluster))
+        cycle_node = GraphNode(Table("test", "cycle_table", cluster))
         graph.nodes[cycle_node.fqdn] = cycle_node
 
         # Create a cycle: events -> events_agg -> cycle_table -> events
-        cycle_mv1 = GraphNode(Table("mv_cycle1", "test", cluster))
-        cycle_mv2 = GraphNode(Table("mv_cycle2", "test", cluster))
+        cycle_mv1 = GraphNode(Table("test", "mv_cycle1", cluster))
+        cycle_mv2 = GraphNode(Table("test", "mv_cycle2", cluster))
         graph.nodes[cycle_mv1.fqdn] = cycle_mv1
         graph.nodes[cycle_mv2.fqdn] = cycle_mv2
 
@@ -367,9 +367,9 @@ class TestGraphSerialization:
         graph = DependencyGraph(cluster)
 
         # Create a simple two-node graph
-        raw_events = GraphNode(Table("events", "raw", cluster))
-        analytics_agg = GraphNode(Table("events_agg", "analytics", cluster))
-        mv_agg = GraphNode(Table("mv_events_agg", "analytics", cluster))
+        raw_events = GraphNode(Table("raw", "events", cluster))
+        analytics_agg = GraphNode(Table("analytics", "events_agg", cluster))
+        mv_agg = GraphNode(Table("analytics", "mv_events_agg", cluster))
 
         graph.nodes[raw_events.fqdn] = raw_events
         graph.nodes[analytics_agg.fqdn] = analytics_agg
@@ -494,9 +494,9 @@ class TestGraphVisualization:
         graph = DependencyGraph(cluster)
 
         # Add nodes from different databases
-        raw_events = GraphNode(Table("events", "raw", cluster))
-        analytics_agg = GraphNode(Table("events_agg", "analytics", cluster))
-        temp_table = GraphNode(Table("temp_data", "temp", cluster))
+        raw_events = GraphNode(Table("raw", "events", cluster))
+        analytics_agg = GraphNode(Table("analytics", "events_agg", cluster))
+        temp_table = GraphNode(Table("temp", "temp_data", cluster))
 
         graph.nodes[raw_events.fqdn] = raw_events
         graph.nodes[analytics_agg.fqdn] = analytics_agg
@@ -529,8 +529,8 @@ class TestGraphVisualization:
         graph = DependencyGraph(cluster)
 
         # Create nodes
-        raw_events = GraphNode(Table("events", "raw", cluster))
-        raw_users = GraphNode(Table("users", "raw", cluster))
+        raw_events = GraphNode(Table("raw", "events", cluster))
+        raw_users = GraphNode(Table("raw", "users", cluster))
         analytics_agg = GraphNode(Table("events_agg", "analytics", cluster))
         mv_agg = GraphNode(Table("mv_events_agg", "analytics", cluster))
 

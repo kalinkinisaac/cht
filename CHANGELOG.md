@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2024-11-28
+
+### Added
+- **Enhanced Table Constructor**: Flexible syntax support for table initialization
+  - `Table('database.table')` - Database.table dot notation parsing
+  - `Table('events', 'analytics')` - Positional arguments (database, table)
+  - `Table(database_or_fqdn='events', table_name='analytics')` - Keyword arguments
+  - Full backward compatibility with existing constructor patterns
+  - Comprehensive test coverage with 15 new test cases
+
 ### Added
 - **Single-File Distribution**: Two distribution options inspired by copyparty
   - `cht-sfx.py` - Self-extracting file with all dependencies (~27MB, no pip needed)

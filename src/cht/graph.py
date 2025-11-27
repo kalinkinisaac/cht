@@ -144,7 +144,7 @@ class DependencyGraph:
 
         # Step 2: Create nodes for all tables (including MVs)
         for database, table_name, engine in all_tables:
-            table_obj = Table(name=table_name, database=database, cluster=self.cluster)
+            table_obj = Table(database, table_name, cluster=self.cluster)
             node = GraphNode(table_obj)
             self.nodes[node.fqdn] = node
 

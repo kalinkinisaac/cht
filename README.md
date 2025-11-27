@@ -140,6 +140,27 @@ result_df = table.to_df()
 print(result_df)
 ```
 
+### Table Constructor Flexibility
+
+The `Table` class supports multiple flexible constructor patterns for convenient table references:
+
+```python
+from cht import Table
+
+# Simple table name (uses 'default' database)
+table = Table('users')                     # → default.users
+
+# Database.table syntax
+table = Table('analytics.events')          # → analytics.events  
+
+# Explicit parameters (database first, table second)
+table = Table('events', 'analytics')       # → events.analytics
+table = Table(database_or_fqdn='events', table_name='analytics')  # → events.analytics
+
+# With specific cluster
+table = Table('analytics.events', cluster=my_cluster)
+```
+
 ## Dependency Graph Analysis
 
 Discover and visualize table relationships across your ClickHouse cluster:

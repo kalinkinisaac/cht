@@ -24,7 +24,7 @@ def make_cluster(responses):
 
 def test_table_exists_true():
     cluster = make_cluster([[(1,)]])
-    table = Table(name="events", cluster=cluster)
+    table = Table("default", "events", cluster=cluster)
     assert table.exists() is True
     cluster.query.assert_called_with("EXISTS TABLE default.events")
 
@@ -38,7 +38,7 @@ def test_backup_to_suffix_recreates_when_exists():
             [],  # insert
         ]
     )
-    table = Table(name="events", cluster=cluster)
+    table = Table("default", "events", cluster=cluster)
     backup_name = table.backup_to_suffix(recreate=True)
     assert backup_name == "events_backup"
     drop_sql = cluster.query.call_args_list[1][0][0]
@@ -56,7 +56,7 @@ def test_verify_backup_passes_when_matching():
             [(5,)],  # count backup
         ]
     )
-    table = Table(name="events", cluster=cluster)
+    table = Table("default", "events", cluster=cluster)
     table.verify_backup()
 
 
@@ -69,7 +69,7 @@ def test_repopulate_through_mv_from_table():
             [],  # insert
         ]
     )
-    table = Table(name="events", cluster=cluster)
+    table = Table("default", "events", cluster=cluster)
     with patch.object(table, "find_targeting_mvs", return_value=[("raw", "mv_events")]):
         with patch.object(table, "find_mv_sources", return_value=[("raw", "source")]):
             result = table.repopulate_through_mv(
@@ -83,7 +83,7 @@ def test_repopulate_through_mv_from_table():
 
 def test_remote_expression_uses_cluster_credentials():
     cluster = make_cluster([])
-    table = Table(name="events", cluster=cluster)
+    table = Table("default", "events", cluster=cluster)
     remote_expr = table.remote(port=9100)
     assert remote_expr == "remote('host', default.events, 'user', 'pwd', 9100)"
 
@@ -97,7 +97,7 @@ def test_table_to_df():
     cluster = make_cluster([])
     cluster.client = mock_client
 
-    table = Table(name="users", database="test", cluster=cluster)
+    table = Table("test", "users", cluster=cluster)
     result_df = table.to_df()
 
     mock_client.query_df.assert_called_once_with("SELECT * FROM test.users")

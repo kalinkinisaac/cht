@@ -19,8 +19,8 @@ def test_sync_missing_rows_by_date_builds_expected_sql():
     origin_cluster = make_cluster()
     remote_cluster = make_cluster()
 
-    origin_table = Table(name="origin", cluster=origin_cluster)
-    remote_table = Table(name="dest", cluster=remote_cluster)
+    origin_table = Table("default", "origin", cluster=origin_cluster)
+    remote_table = Table("default", "dest", cluster=remote_cluster)
 
     with patch.object(origin_table, "get_time_column", return_value="event_date"):
         with patch.object(origin_table, "get_columns", return_value=["id", "value"]):
@@ -42,7 +42,7 @@ def test_sync_missing_rows_by_date_builds_expected_sql():
 
 def test_analyze_and_remove_duplicates_returns_stats():
     cluster = make_cluster()
-    table = Table(name="events", cluster=cluster)
+    table = Table("default", "events", cluster=cluster)
 
     with patch.object(table, "get_time_column", return_value="event_date"):
         with patch.object(table, "get_columns", return_value=["id", "value"]):
