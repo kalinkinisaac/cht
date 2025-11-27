@@ -208,6 +208,16 @@ table = Table.from_df(
 ```python
 # Load entire table as DataFrame
 df = table.to_df()
+
+# Load with row limit for large tables
+df_sample = table.to_df(limit=1000)
+
+# Load with FINAL modifier for deduplicated data (ReplacingMergeTree, etc.)
+df_final = table.to_df(final=True)
+
+# Combine limit and FINAL
+df_final_sample = table.to_df(limit=1000, final=True)
+
 print(df)
 ```
 

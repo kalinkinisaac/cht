@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cht"
-version = "0.4.3"
+version = "0.4.4"
 description = "Modular ClickHouse operations utilities for backup, maintenance, and Kafka tooling."
 readme = "README.md"
 license = {text = "Proprietary"}

@@ -480,12 +480,13 @@ class Table:
         )
 
     # --------------------------- DataFrame methods -----------------------
-    def to_df(self, limit: Optional[int] = None) -> pd.DataFrame:
+    def to_df(self, limit: Optional[int] = None, final: bool = False) -> pd.DataFrame:
         """
         Load table data as a pandas DataFrame.
 
         Args:
             limit: Maximum number of rows to return (None = all rows)
+            final: Whether to use FINAL modifier to read deduplicated data
 
         Returns:
             DataFrame with table data
@@ -496,12 +497,16 @@ class Table:
             >>> df_sample = table.to_df(limit=1000)  # First 1000 rows
         """
         cluster = self._require_cluster()
+        
+        final_modifier = ""
+
+        if final:
+            final_modifier = " FINAL"
 
         if limit is not None:
-            sql = f"SELECT * FROM {self.fqdn} LIMIT {limit}"
+            sql = f"SELECT * FROM {self.fqdn}{final_modifier} LIMIT {limit}"
         else:
-            sql = f"SELECT * FROM {self.fqdn}"
-
+            sql = f"SELECT * FROM {self.fqdn}{final_modifier}"
         return cluster.client.query_df(sql)
 
     @classmethod
