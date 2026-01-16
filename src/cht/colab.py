@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -56,6 +57,30 @@ def _normalize_df_for_csv(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _resolve_clickhouse_download_url() -> str:
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+
+    arch_map = {
+        "x86_64": "x86_64",
+        "amd64": "x86_64",
+        "aarch64": "aarch64",
+        "arm64": "aarch64",
+    }
+    arch = arch_map.get(machine)
+    if not arch:
+        raise RuntimeError(f"Unsupported architecture: {machine}")
+
+    if system == "linux":
+        os_part = "linux"
+    elif system == "darwin":
+        os_part = "macos"
+    else:
+        raise RuntimeError(f"Unsupported OS for ClickHouse binary install: {system}")
+
+    return f"https://builds.clickhouse.com/master/{os_part}-{arch}/clickhouse"
+
+
 def install_clickhouse(
     dest_path: str = "./clickhouse",
     *,
@@ -73,60 +98,44 @@ def install_clickhouse(
     if os.path.exists(dest_path) and force:
         os.remove(dest_path)
 
+    url = _resolve_clickhouse_download_url()
     temp_dir = tempfile.mkdtemp(prefix="cht-clickhouse-")
     try:
+        temp_path = os.path.join(temp_dir, "clickhouse")
         if shutil.which("curl"):
-            cmd = ["/bin/sh", "-c", "curl https://clickhouse.com/ | sh"]
+            cmd = ["curl", "-L", "-o", temp_path, url]
             proc = subprocess.run(
                 cmd,
-                cwd=temp_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 timeout=timeout_s,
                 check=False,
             )
+            if proc.returncode != 0:
+                stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+                raise RuntimeError(f"ClickHouse download failed: {stderr or 'curl error'}")
         elif shutil.which("wget"):
-            cmd = ["/bin/sh", "-c", "wget -qO- https://clickhouse.com/ | sh"]
+            cmd = ["wget", "-O", temp_path, url]
             proc = subprocess.run(
                 cmd,
-                cwd=temp_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 timeout=timeout_s,
                 check=False,
             )
+            if proc.returncode != 0:
+                stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+                raise RuntimeError(f"ClickHouse download failed: {stderr or 'wget error'}")
         else:
-            script_path = os.path.join(temp_dir, "install_clickhouse.sh")
-            with urllib.request.urlopen("https://clickhouse.com/", timeout=timeout_s) as response:
-                script = response.read().decode("utf-8")
-            with open(script_path, "w", encoding="utf-8") as handle:
-                handle.write(script)
-            proc = subprocess.run(
-                ["/bin/sh", script_path],
-                cwd=temp_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=timeout_s,
-                check=False,
-            )
+            with urllib.request.urlopen(url, timeout=timeout_s) as response:
+                data = response.read()
+            with open(temp_path, "wb") as handle:
+                handle.write(data)
 
-        if proc.returncode != 0:
-            stderr = proc.stderr.decode("utf-8", errors="replace").strip()
-            stdout = proc.stdout.decode("utf-8", errors="replace").strip()
-            detail = stderr or stdout or "unknown installer error"
-            raise RuntimeError(f"ClickHouse install failed: {detail}")
+        if not os.path.isfile(temp_path) or os.path.getsize(temp_path) == 0:
+            raise RuntimeError("ClickHouse download failed: empty binary")
 
-        candidates = []
-        for name in os.listdir(temp_dir):
-            if name.startswith("clickhouse"):
-                path = os.path.join(temp_dir, name)
-                if os.path.isfile(path):
-                    candidates.append(path)
-        if not candidates:
-            raise RuntimeError("ClickHouse install failed: binary not found after download")
-
-        binary = max(candidates, key=os.path.getmtime)
-        shutil.move(binary, dest_path)
+        shutil.move(temp_path, dest_path)
         os.chmod(dest_path, 0o755)
         return dest_path
     finally:
