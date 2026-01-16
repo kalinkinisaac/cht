@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-01-16
+
+### Added
+- **Colab LazyCluster**: Serializable `clickhouse-local` wrapper for per-query boot/run/stop flows.
+- **Installer Helper**: `install_clickhouse()` utility to fetch the ClickHouse binary programmatically.
+- **Documentation**: Colab usage guide for LazyCluster.
+
+### Fixed
+- **Stdin Inserts**: Use `--queries-file` for `clickhouse local` to support CSVWithNames inserts.
+
 ## [0.4.5] - 2024-11-28
 
 ### Added

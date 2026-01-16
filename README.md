@@ -74,6 +74,41 @@ import cht
 print("cht version:", cht.__version__)
 ```
 
+## Web Interface
+
+CHT includes a web-based metadata explorer for ClickHouse databases with a simple command:
+
+```bash
+# Quick start with defaults (localhost ClickHouse)
+python -m cht.web
+
+# Or use the installed command
+cht-web
+
+# Custom ClickHouse connection
+python -m cht.web --ch-host production.clickhouse.com --ch-user admin --ch-password secret
+
+# Development mode with auto-reload
+python -m cht.web --reload --port 9000
+```
+
+**Features:**
+- 🌐 **Browser UI**: Visual database and table exploration at `/ui`
+- 📊 **API Docs**: Interactive Swagger documentation at `/docs`
+- 🔧 **Multi-cluster**: Manage multiple ClickHouse connections
+- ✏️ **Comment Editing**: Update table and column comments
+- 📋 **Schema Browser**: View database structure and data types
+- 🔒 **Flexible Auth**: Support for secure connections and read-only mode
+
+**Quick URLs:**
+- Web Interface: http://localhost:8000/ui
+- API Documentation: http://localhost:8000/docs
+
+**Command Line Options:**
+```bash
+python -m cht.web --help  # See all options
+```
+
 ## Features
 - `Cluster` wrapper with structured logging, bulk execution helper, and disk usage introspection.
 - `Table` convenience API for backups, restore flows, MV replay, and metadata inspection.
@@ -370,6 +405,7 @@ PROJECT_STRUCTURE.md    # Development guidelines and best practices
 - [Examples Guide](examples/README.md) - Comprehensive usage examples
 - [Dependency Graph Mapping](GRAPH_MAPPING.md) - Graph analysis features
 - [Project Structure](PROJECT_STRUCTURE.md) - Development guidelines
+- [Colab LazyCluster](docs/colab_lazy_cluster.md) - clickhouse-local helper for Colab notebooks
 - [Contributing Guide](CONTRIBUTING.md) - Contribution workflow
 - [Changelog](CHANGELOG.md) - Version history
 

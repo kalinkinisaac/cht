@@ -10,6 +10,7 @@ build/
 htmlcov/
 .DS_Store
 .venv/
+.vscode/
 
 # Single-file distributions
 cht-sfx.py

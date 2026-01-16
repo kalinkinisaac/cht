@@ -106,6 +106,26 @@ class Cluster:
             )
         return self._client
 
+    def create_fresh_client(self) -> Client:
+        """
+        Create a fresh client connection for this request.
+        Use this in concurrent environments (like web APIs) to avoid
+        'concurrent queries within the same session' errors.
+        """
+        settings = {"readonly": 1} if self.read_only else {}
+        # Add query timeout for web interface
+        settings["max_execution_time"] = 30  # 30 second query timeout
+
+        return self._client_factory(
+            host=self.host,
+            port=self.port,
+            username=self.user,
+            password=self.password,
+            secure=self.secure,
+            verify=self.verify,
+            settings=settings,
+        )
+
     # ---------------------------- execution ------------------------------
     def _execute_logged(self, sql: str, *, test_run: bool = False) -> Optional[QueryResult]:
         trimmed = (sql or "").strip()
@@ -177,6 +197,69 @@ class Cluster:
     def query_raw(self, sql: str, *, test_run: bool = False) -> Optional[QueryResult]:
         """Execute SQL and return the ``QueryResult`` object from ``clickhouse_connect``."""
         return self._execute_logged(sql, test_run=test_run)
+
+    def query_with_fresh_client(
+        self, sql: str, *, test_run: bool = False
+    ) -> Optional[Sequence[Sequence[Any]]]:
+        """
+        Execute SQL with a fresh client connection.
+        Use this in concurrent environments (like web APIs) to avoid
+        'concurrent queries within the same session' errors.
+        """
+        trimmed = (sql or "").strip()
+        mutating = is_mutating(trimmed)
+
+        if self.read_only and mutating:
+            raise RuntimeError(f"Attempted mutation in read-only cluster '{self.name}': {sql[:50]}")
+
+        if self.log_sql_text:
+            display = (
+                trimmed
+                if len(trimmed) <= self.log_sql_truncate
+                else trimmed[: self.log_sql_truncate] + " … [truncated]"
+            )
+            _logger.info(
+                "EXECUTE (fresh client) | cluster=%s | sql=%s | test_run=%s",
+                self.name,
+                display,
+                test_run,
+            )
+
+        if test_run:
+            return None
+
+        # Create a fresh client for this query to avoid concurrency issues
+        client = self.create_fresh_client()
+        start = time()
+        try:
+            if mutating:
+                client.command(trimmed)
+                _logger.info(
+                    "MUTATION OK (fresh client) | cluster=%s | elapsed=%.3fs",
+                    self.name,
+                    time() - start,
+                )
+                return None
+            result = client.query(trimmed)
+            _logger.info(
+                "QUERY OK (fresh client) | cluster=%s | rows=%d | elapsed=%.3fs",
+                self.name,
+                len(result.result_rows),
+                time() - start,
+            )
+            return result.result_rows
+        except Exception as exc:  # pragma: no cover - logging side effect
+            _logger.exception(
+                "%s FAILED (fresh client) | cluster=%s | elapsed=%.3fs | error=%s",
+                "MUTATION" if mutating else "QUERY",
+                self.name,
+                time() - start,
+                exc,
+            )
+            raise
+        finally:
+            # Close the client connection
+            client.close()
 
     def query_bulk(self, queries: Iterable[str], *, test_run: bool = False) -> None:
         """Run a reusable bulk executor with progress messages to stdout."""

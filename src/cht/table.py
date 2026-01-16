@@ -62,11 +62,11 @@ class Table:
             cluster: ClickHouse cluster instance
 
         Examples:
-            >>> Table('users')                    # database_or_fqdn='users', table_name=None 
+            >>> Table('users')                    # database_or_fqdn='users', table_name=None
             >>>                                     # → database='default', name='users'
-            >>> Table('analytics.events')         # database_or_fqdn='analytics.events' 
+            >>> Table('analytics.events')         # database_or_fqdn='analytics.events'
             >>>                                     # → database='analytics', name='events'
-            >>> Table('events', 'analytics')      # database_or_fqdn='events', table_name='analytics' 
+            >>> Table('events', 'analytics')      # database_or_fqdn='events', table_name='analytics'
             >>>                                     # → database='events', name='analytics'
             >>> Table(database_or_fqdn='events', table_name='analytics')  # explicit keyword args
         """
@@ -170,6 +170,23 @@ class Table:
         columns = [row[0] for row in rows]
         _logger.info("[get_columns] %s -> %d columns", self.fqdn, len(columns))
         return columns
+
+    def set_comment(self, comment: str) -> None:
+        """Set or update the table-level comment."""
+        cluster = self._require_cluster()
+        escaped = comment.replace("'", "''")
+        table_ident = format_identifier(self.database, self.name)
+        cluster.query_with_fresh_client(f"ALTER TABLE {table_ident} MODIFY COMMENT '{escaped}'")
+
+    def set_column_comment(self, column: str, comment: str) -> None:
+        """Set or update a column comment."""
+        cluster = self._require_cluster()
+        escaped_comment = comment.replace("'", "''")
+        table_ident = format_identifier(self.database, self.name)
+        escaped_column = f"`{column.replace('`', '``')}`"
+        cluster.query_with_fresh_client(
+            f"ALTER TABLE {table_ident} COMMENT COLUMN {escaped_column} '{escaped_comment}'"
+        )
 
     def get_time_column(self) -> Optional[str]:
         for row in self._require_cluster().query(f"DESCRIBE TABLE {self.fqdn}"):

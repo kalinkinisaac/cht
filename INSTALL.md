@@ -58,6 +58,21 @@ table = Table.from_df(df, cluster=cluster, database="test", name="demo")
 result_df = table.to_df()
 ```
 
+### Web Interface
+
+```bash
+# Start web interface for ClickHouse metadata exploration
+python -m cht.web
+
+# Or use the installed command
+cht-web
+
+# Custom connection
+cht-web --ch-host production.clickhouse.com --ch-user admin --ch-password secret
+```
+
+Open http://localhost:8000/ui for the browser interface.
+
 ## ⚡ Performance Tips
 
 - Use git installation for latest features
