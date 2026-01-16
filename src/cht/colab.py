@@ -62,23 +62,23 @@ def _resolve_clickhouse_download_url() -> str:
     machine = platform.machine().lower()
 
     arch_map = {
-        "x86_64": "x86_64",
-        "amd64": "x86_64",
-        "aarch64": "aarch64",
-        "arm64": "aarch64",
+        "x86_64": "amd64",
+        "amd64": "amd64",
+        "aarch64": "arm64",
+        "arm64": "arm64",
     }
     arch = arch_map.get(machine)
     if not arch:
         raise RuntimeError(f"Unsupported architecture: {machine}")
 
     if system == "linux":
-        os_part = "linux"
+        os_part = ""
     elif system == "darwin":
-        os_part = "macos"
+        os_part = "macos-"
     else:
         raise RuntimeError(f"Unsupported OS for ClickHouse binary install: {system}")
 
-    return f"https://builds.clickhouse.com/master/{os_part}-{arch}/clickhouse"
+    return f"https://builds.clickhouse.com/master/{os_part}{arch}/clickhouse"
 
 
 def install_clickhouse(

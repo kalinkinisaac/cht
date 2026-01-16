@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-01-16
+
+### Fixed
+- **Colab Installer**: Use ClickHouse download paths that match current build host naming.
+
 ## [0.4.7] - 2026-01-16
 
 ### Fixed
