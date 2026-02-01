@@ -131,7 +131,7 @@ def test_build_create_table_sql_basic():
     assert "`id` Int64" in sql
     assert "`name` String" in sql
     assert "ENGINE = MergeTree" in sql
-    assert "ORDER BY (`id`)" in sql  # Default order by first column
+    assert "ORDER BY (tuple())" in sql  # Default order by tuple()
 
 
 def test_build_create_table_sql_custom_engine():

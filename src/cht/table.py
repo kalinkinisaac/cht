@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 from typing import Any, Dict, List, Optional, Tuple, Union
+from urllib.parse import parse_qs, quote_plus, urlparse
 
 import pandas as pd
 
@@ -558,6 +559,66 @@ class Table:
         )
 
     # --------------------------- DataFrame methods -----------------------
+    @staticmethod
+    def _google_sheet_csv_url(
+        sheet_id_or_url: str,
+        *,
+        gid: Optional[Union[int, str]] = None,
+        sheet_name: Optional[str] = None,
+    ) -> str:
+        if not sheet_id_or_url:
+            raise ValueError("sheet_id_or_url must be provided")
+
+        if sheet_name and gid is not None:
+            raise ValueError("Provide only one of sheet_name or gid, not both")
+
+        sheet_id = sheet_id_or_url
+        parsed_gid: Optional[str] = None
+
+        if "://" in sheet_id_or_url:
+            parsed = urlparse(sheet_id_or_url)
+            if "docs.google.com" not in parsed.netloc:
+                raise ValueError("Expected a Google Sheets URL or sheet id")
+            if "/spreadsheets/d/" not in parsed.path:
+                raise ValueError("Invalid Google Sheets URL format")
+
+            if ("export" in parsed.path or "gviz" in parsed.path) and not (gid or sheet_name):
+                return sheet_id_or_url
+
+            sheet_id = parsed.path.split("/spreadsheets/d/", 1)[1].split("/", 1)[0].strip()
+
+            if parsed.query:
+                parsed_gid = parse_qs(parsed.query).get("gid", [None])[0]
+            if parsed_gid is None and parsed.fragment:
+                parsed_gid = parse_qs(parsed.fragment).get("gid", [None])[0]
+
+        if gid is None and parsed_gid is not None:
+            gid = parsed_gid
+
+        if sheet_name:
+            encoded_sheet = quote_plus(sheet_name)
+            return (
+                f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq"
+                f"?tqx=out:csv&sheet={encoded_sheet}"
+            )
+
+        gid_value = str(gid if gid is not None else 0)
+        return (
+            f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+            f"&gid={gid_value}"
+        )
+
+    @staticmethod
+    def _read_csv_unverified(url: str, read_csv_kwargs: Dict[str, Any]) -> pd.DataFrame:
+        import io
+        import ssl
+        import urllib.request
+
+        context = ssl._create_unverified_context()
+        with urllib.request.urlopen(url, context=context) as response:
+            data = response.read()
+        return pd.read_csv(io.BytesIO(data), **read_csv_kwargs)
+
     def to_df(self, limit: Optional[int] = None, final: bool = False) -> pd.DataFrame:
         """
         Load table data as a pandas DataFrame.
@@ -785,6 +846,57 @@ class Table:
         cls._add_ttl_comment(cluster, table, ttl)
 
         return table
+
+    @classmethod
+    def from_google_sheet(
+        cls,
+        sheet_id_or_url: str,
+        cluster: Optional[Cluster] = None,
+        *,
+        database: str = "temp",
+        name: Optional[str] = None,
+        gid: Optional[Union[int, str]] = None,
+        sheet_name: Optional[str] = None,
+        read_csv_kwargs: Optional[Dict[str, Any]] = None,
+        verify_ssl: bool = False,
+        **table_kwargs: Any,
+    ) -> "Table":
+        """
+        Create a table from a Google Sheet.
+
+        The sheet must be publicly accessible or published to the web, unless you
+        pass a pre-authenticated CSV export URL.
+
+        Args:
+            sheet_id_or_url: Google Sheet ID or full URL
+            cluster: ClickHouse cluster instance (uses default if None)
+            database: Target database (default: "temp")
+            name: Table name (auto-generated if None)
+            gid: Worksheet GID (default: 0)
+            sheet_name: Worksheet name (alternative to gid)
+            read_csv_kwargs: Extra kwargs forwarded to pandas.read_csv
+            verify_ssl: Verify TLS certs when downloading the sheet (default: False)
+            **table_kwargs: Forwarded to Table.from_df (mode, ttl, engine, etc.)
+
+        Returns:
+            Table instance pointing to the created table
+        """
+        csv_url = cls._google_sheet_csv_url(sheet_id_or_url, gid=gid, sheet_name=sheet_name)
+        read_csv_kwargs = dict(read_csv_kwargs or {})
+        if verify_ssl:
+            df = pd.read_csv(csv_url, **read_csv_kwargs)
+        else:
+            _logger.warning(
+                "[from_google_sheet] SSL verification disabled for download: %s", csv_url
+            )
+            df = cls._read_csv_unverified(csv_url, read_csv_kwargs)
+        return cls.from_df(
+            df,
+            cluster=cluster,
+            database=database,
+            name=name,
+            **table_kwargs,
+        )
 
     @classmethod
     def from_query(

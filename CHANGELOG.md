@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.9] - 2026-02-01
+
+### Added
+- **Google Sheets Import**: `Table.from_google_sheet()` to load a public sheet into ClickHouse via CSV export.
+
+### Changed
+- **MergeTree Defaults**: Default `ORDER BY` now uses `tuple()` when not specified, avoiding nullable key errors.
+- **Google Sheets Download**: SSL verification disabled by default for sheet downloads (opt-in via `verify_ssl=True`).
+
 ## [0.4.8] - 2026-01-16
 
 ### Fixed

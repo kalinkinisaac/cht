@@ -179,8 +179,8 @@ def build_create_table_sql(
             expression = ", ".join(_format_identifier(v) for v in value)
         return f"\n{keyword} ({expression})"
 
-    if engine.lower() == "mergetree" and not order_by:
-        order_by = (df.columns[0],)
+    if "mergetree" in engine.lower() and not order_by:
+        order_by = "tuple()"
 
     settings_clause = ""
     if settings:

@@ -36,7 +36,7 @@ from .sql_utils import (
 )
 from .table import Table
 
-__version__ = "0.4.8"
+__version__ = "0.4.9"
 
 __all__ = [
     "Cluster",

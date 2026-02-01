@@ -104,6 +104,76 @@ def test_table_to_df():
     assert result_df.equals(expected_df)
 
 
+def test_table_from_google_sheet_parses_url_gid():
+    df = pd.DataFrame({"id": [1], "name": ["a"]})
+    cluster = MagicMock()
+
+    with patch("cht.table.pd.read_csv", return_value=df) as read_csv:
+        with patch.object(
+            Table, "from_df", return_value=Table("temp", "sheet", cluster=cluster)
+        ) as from_df:
+            result = Table.from_google_sheet(
+                "https://docs.google.com/spreadsheets/d/abc123/edit#gid=456",
+                cluster=cluster,
+                name="sheet",
+                verify_ssl=True,
+            )
+
+    read_csv.assert_called_once_with(
+        "https://docs.google.com/spreadsheets/d/abc123/export?format=csv&gid=456"
+    )
+    args, kwargs = from_df.call_args
+    assert kwargs["cluster"] == cluster
+    assert kwargs["database"] == "temp"
+    assert kwargs["name"] == "sheet"
+    assert result.name == "sheet"
+
+
+def test_table_from_google_sheet_uses_sheet_name_and_kwargs():
+    df = pd.DataFrame({"id": [1], "name": ["a"]})
+
+    with patch("cht.table.pd.read_csv", return_value=df) as read_csv:
+        with patch.object(Table, "from_df", return_value=Table("temp", "sheet")):
+            Table.from_google_sheet(
+                "sheet_id",
+                sheet_name="My Sheet",
+                read_csv_kwargs={"dtype": str},
+                verify_ssl=True,
+            )
+
+    read_csv.assert_called_once_with(
+        "https://docs.google.com/spreadsheets/d/sheet_id/gviz/tq?tqx=out:csv&sheet=My+Sheet",
+        dtype=str,
+    )
+
+
+def test_table_from_google_sheet_verify_ssl_false_uses_unverified_fetch():
+    df = pd.DataFrame({"id": [1], "name": ["a"]})
+
+    class DummyResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"id,name\n1,a\n"
+
+    with patch("urllib.request.urlopen", return_value=DummyResponse()) as urlopen:
+        with patch("cht.table.pd.read_csv", return_value=df) as read_csv:
+            with patch.object(Table, "from_df", return_value=Table("temp", "sheet")):
+                Table.from_google_sheet("sheet_id", verify_ssl=False)
+
+    assert urlopen.call_count == 1
+    assert read_csv.call_count == 1
+
+
+def test_table_from_google_sheet_gid_and_sheet_name_conflict():
+    with pytest.raises(ValueError, match="sheet_name"):
+        Table.from_google_sheet("sheet_id", gid=1, sheet_name="Sheet1")
+
+
 def test_table_from_df_overwrite_mode():
     """Test Table.from_df() with overwrite mode."""
     df = pd.DataFrame(
